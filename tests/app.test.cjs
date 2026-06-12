@@ -17,11 +17,17 @@ const {
   getNoteThemeIds,
   getNotePage,
   getNoteTags,
+  getNoteFavorite,
   getNoteHtml,
   getNoteText,
   setNoteHtml,
+  setNoteFavorite,
   getNoteWordCount,
   getNoteSummaryText,
+  filterFavoriteNotes,
+  groupNotesByLocalDate,
+  noteMatchesTag,
+  normalizeImportedState,
   textToHtml,
   stripHtml,
   richTextToMarkdown,
@@ -122,6 +128,27 @@ test("migrateState preserves custom book cover images", () => {
   });
 
   assert.equal(migrated.books[0].coverImage, coverImage);
+});
+
+test("migrateState backfills book timestamps and note favorite metadata", () => {
+  const migrated = migrateState({
+    books: [{ id: "book-a", title: "Book A", author: "Author A" }],
+    themes: [],
+    notes: [
+      {
+        id: "note-favorite",
+        title: "Favorite Note",
+        favorite: true,
+        metadata: { tags: ["keep"] },
+      },
+    ],
+  });
+
+  assert.ok(migrated.books[0].createdAt);
+  assert.ok(migrated.books[0].updatedAt);
+  assert.equal(getNoteFavorite(migrated.notes[0]), true);
+  assert.equal(migrated.notes[0].metadata.favorite, true);
+  assert.equal(migrated.notes[0].favorite, true);
 });
 
 test("migrateState backfills html from text and text from html", () => {
@@ -266,6 +293,19 @@ test("getNoteSummaryText prefers body text and falls back to quote text", () => 
     }),
     "Quote fallback",
   );
+});
+
+test("favorite, timeline, tag, and import helpers support workbench views", () => {
+  const state = createInitialState();
+
+  setNoteFavorite(state.notes[0], true);
+
+  assert.equal(getNoteFavorite(state.notes[0]), true);
+  assert.deepEqual(filterFavoriteNotes(state).map((note) => note.id), [state.notes[0].id]);
+  assert.equal(groupNotesByLocalDate(state.notes)[0].date, "2026-06-10");
+  assert.equal(noteMatchesTag(state.notes[0], { kind: "theme", id: "theme-method", name: "阅读方法" }), true);
+  assert.equal(noteMatchesTag(state.notes[0], { kind: "tag", id: "主动阅读", name: "主动阅读" }), true);
+  assert.equal(normalizeImportedState(JSON.stringify(state)).schemaVersion, 2);
 });
 
 test("createInitialState returns starter books, themes, and complete notes", () => {

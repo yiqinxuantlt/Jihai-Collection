@@ -431,6 +431,65 @@
     };
   }
 
+  function getNoteFavorite(note) {
+    return Boolean(note && (note.favorite || note.metadata && note.metadata.favorite));
+  }
+
+  function setNoteFavorite(note, value) {
+    if (!note || typeof note !== "object") return note;
+    note.metadata = note.metadata && typeof note.metadata === "object" ? note.metadata : {};
+    note.metadata.favorite = Boolean(value);
+    note.favorite = note.metadata.favorite;
+    return note;
+  }
+
+  function filterFavoriteNotes(source, query) {
+    var safeState = Array.isArray(source) ? { notes: source, books: [], themes: [] } : source || {};
+    return getNotes(safeState).filter(function (note) {
+      return getNoteFavorite(note) && noteMatchesQuery(note, safeState, query || "");
+    });
+  }
+
+  function groupNotesByLocalDate(notes) {
+    var groups = Object.create(null);
+    (Array.isArray(notes) ? notes : []).filter(function (note) {
+      return note && typeof note === "object";
+    }).forEach(function (note) {
+      var key = getLocalDateKey(getNoteUpdatedAt(note) || getNoteCreatedAt(note));
+      if (!key) key = "未知日期";
+      groups[key] = groups[key] || [];
+      groups[key].push(note);
+    });
+
+    return Object.keys(groups).sort().reverse().map(function (date) {
+      return {
+        date: date,
+        notes: groups[date].sort(function (a, b) {
+          return new Date(getNoteUpdatedAt(b)).getTime() - new Date(getNoteUpdatedAt(a)).getTime();
+        }),
+      };
+    });
+  }
+
+  function noteMatchesTag(note, tag) {
+    if (!tag) return true;
+    if (tag.kind === "theme") {
+      return getNoteThemeIds(note).indexOf(String(tag.id || "")) !== -1;
+    }
+    return getNoteTags(note).some(function (name) {
+      return name === tag.name || name === tag.id;
+    });
+  }
+
+  function normalizeImportedState(input) {
+    var parsed = typeof input === "string" ? JSON.parse(input) : input;
+    var normalized = migrateState(parsed);
+    if (!normalized || !Array.isArray(normalized.books) || !Array.isArray(normalized.notes)) {
+      throw new Error("Invalid reading notes data");
+    }
+    return normalized;
+  }
+
   function syncNoteAliases(note) {
     note.type = getNoteType(note);
     note.quote = getNoteText(note, "quote");
@@ -441,6 +500,7 @@
     note.themeIds = getNoteThemeIds(note);
     note.page = getNotePage(note);
     note.tags = getNoteTags(note);
+    note.favorite = getNoteFavorite(note);
     note.createdAt = getNoteCreatedAt(note);
     note.updatedAt = getNoteUpdatedAt(note);
     return note;
@@ -503,6 +563,7 @@
       metadata: {
         page: String(page || ""),
         tags: uniqueStrings(metadata.tags || source.tags),
+        favorite: Boolean(metadata.favorite || source.favorite),
         createdAt: metadata.createdAt || source.createdAt || now,
         updatedAt: metadata.updatedAt || source.updatedAt || source.createdAt || now,
         sortAt: metadata.sortAt || source.sortAt || source.updatedAt || source.createdAt || now,
@@ -707,6 +768,9 @@
       note.metadata.tags = uniqueStrings(values.tags);
       note.tags = note.metadata.tags;
     }
+    if (Object.hasOwn(values, "favorite")) {
+      setNoteFavorite(note, values.favorite);
+    }
   }
 
   function touchNote(note, date) {
@@ -817,17 +881,23 @@
     getNoteThemeIds: getNoteThemeIds,
     getNotePage: getNotePage,
     getNoteTags: getNoteTags,
+    getNoteFavorite: getNoteFavorite,
     getNoteCreatedAt: getNoteCreatedAt,
     getNoteUpdatedAt: getNoteUpdatedAt,
     getNoteHtml: getNoteHtml,
     getNoteText: getNoteText,
     setNoteHtml: setNoteHtml,
     setNoteMeta: setNoteMeta,
+    setNoteFavorite: setNoteFavorite,
     touchNote: touchNote,
     getNoteSearchText: getNoteSearchText,
     getNoteWordCount: getNoteWordCount,
     getNoteSummaryText: getNoteSummaryText,
     getNoteMarkdownContent: getNoteMarkdownContent,
+    filterFavoriteNotes: filterFavoriteNotes,
+    groupNotesByLocalDate: groupNotesByLocalDate,
+    noteMatchesTag: noteMatchesTag,
+    normalizeImportedState: normalizeImportedState,
     escapeHtml: escapeHtml,
     textToHtml: textToHtml,
     stripHtml: stripHtml,
@@ -856,14 +926,32 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       { id: "shelf", label: "我的书架", meta: "按书籍组织摘录与随笔" },
       { id: "quotes", label: "全部摘录", meta: "所有可复读的原文片段" },
       { id: "essays", label: "随笔", meta: "由摘录生长出的想法" },
+      { id: "favorites", label: "收藏", meta: "重要摘录与随笔" },
       { id: "tags", label: "标签", meta: "主题与关键词索引" },
       { id: "recent", label: "最近阅读", meta: "按更新时间回到现场" },
+      { id: "tag-detail", label: "标签详情", meta: "围绕一个标签整理相关内容", hidden: true },
     ];
     var BOOK_STATUS_FILTERS = [
       { id: "all", label: "全部" },
       { id: "reading", label: "正在读" },
       { id: "finished", label: "已读" },
       { id: "planned", label: "待读" },
+    ];
+    var NOTE_TYPE_FILTERS = [
+      { id: "all", label: "全部类型" },
+      { id: "quote", label: "摘录" },
+      { id: "essay", label: "随笔" },
+      { id: "thought", label: "感想" },
+    ];
+    var BOOK_SORT_OPTIONS = [
+      { id: "updated-desc", label: "最近更新" },
+      { id: "title", label: "书名" },
+      { id: "note-count", label: "记录数" },
+    ];
+    var NOTE_SORT_OPTIONS = [
+      { id: "updated-desc", label: "最近更新" },
+      { id: "created-asc", label: "最早创建" },
+      { id: "title", label: "标题" },
     ];
     var PROMPTS = [
       "这段文字真正改变了你对哪个概念的理解？",
@@ -919,13 +1007,29 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       migrated.activeView = "shelf";
       migrated.activeBookId = "";
       migrated.bookFilter = "all";
+      migrated.ui.activeView = "shelf";
+      migrated.ui.activeBookId = "";
+      migrated.ui.filters.bookFilter = "all";
       migrated.workspaceSection = "shelf";
       migrated.bookStatusFilter = "all";
-      migrated.query = migrated.query || "";
+      migrated.noteTypeFilter = "all";
+      migrated.sortMode = "updated-desc";
+      migrated.selectedTag = null;
+      migrated.query = "";
+      migrated.ui.filters.query = "";
       migrated.activeNoteId = migrated.activeNoteId || (migrated.notes[0] && migrated.notes[0].id) || "";
       var finalState = logic.migrateState(migrated);
+      finalState.activeView = "shelf";
+      finalState.ui.activeView = "shelf";
+      finalState.activeBookId = "";
+      finalState.ui.activeBookId = "";
+      finalState.bookFilter = "all";
+      finalState.ui.filters.bookFilter = "all";
       finalState.workspaceSection = "shelf";
       finalState.bookStatusFilter = "all";
+      finalState.noteTypeFilter = "all";
+      finalState.sortMode = "updated-desc";
+      finalState.selectedTag = null;
       return finalState;
     }
 
@@ -941,6 +1045,9 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       safeState.bookFilter = "all";
       safeState.workspaceSection = "shelf";
       safeState.bookStatusFilter = "all";
+      safeState.noteTypeFilter = "all";
+      safeState.sortMode = "updated-desc";
+      safeState.selectedTag = null;
       safeState.editorFocusMode = Boolean(safeState.editorFocusMode);
       safeState.query = safeState.query || "";
       safeState.notes.forEach(function (note) {
@@ -1002,6 +1109,23 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       var button = element("button", className, text);
       button.type = "button";
       return button;
+    }
+
+    function createCompactSelect(label, options, value, onChange) {
+      var wrap = element("label", "compact-select");
+      wrap.appendChild(element("span", null, label));
+      var select = element("select");
+      options.forEach(function (item) {
+        var option = element("option", null, item.label);
+        option.value = item.id;
+        option.selected = item.id === value;
+        select.appendChild(option);
+      });
+      select.addEventListener("change", function (event) {
+        onChange(event.target.value);
+      });
+      wrap.appendChild(select);
+      return wrap;
     }
 
     function formatClock(date) {
@@ -1087,6 +1211,12 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
         state.activeNoteId = note ? note.id : "";
       }
       return note;
+    }
+
+    function findNoteById(noteId) {
+      return state.notes.find(function (item) {
+        return item.id === noteId;
+      }) || null;
     }
 
     function activeBook() {
@@ -1176,14 +1306,56 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       });
     }
 
+    function noteTypeFilterMatch(note) {
+      return (state.noteTypeFilter || "all") === "all" || logic.getNoteType(note) === state.noteTypeFilter;
+    }
+
+    function sortNotesForWorkbench(notes) {
+      var sorted = notes.slice();
+      if (state.sortMode === "created-asc") {
+        return sorted.sort(function (a, b) {
+          return new Date(logic.getNoteCreatedAt(a)).getTime() - new Date(logic.getNoteCreatedAt(b)).getTime();
+        });
+      }
+      if (state.sortMode === "title") {
+        return sorted.sort(function (a, b) {
+          return logic.getNoteTitle(a).localeCompare(logic.getNoteTitle(b), "zh-CN");
+        });
+      }
+      return sortNotesByUpdate(sorted);
+    }
+
+    function bookSortTimestamp(book) {
+      var notes = logic.getBookNotes(state, book.id, "all", "");
+      var latest = sortNotesByUpdate(notes)[0];
+      return new Date(latest ? logic.getNoteUpdatedAt(latest) : book.updatedAt || book.createdAt || 0).getTime();
+    }
+
+    function sortBooksForWorkbench(books) {
+      var sorted = books.slice();
+      if (state.sortMode === "title") {
+        return sorted.sort(function (a, b) {
+          return a.title.localeCompare(b.title, "zh-CN");
+        });
+      }
+      if (state.sortMode === "note-count") {
+        return sorted.sort(function (a, b) {
+          return logic.getBookNotes(state, b.id, "all", "").length - logic.getBookNotes(state, a.id, "all", "").length;
+        });
+      }
+      return sorted.sort(function (a, b) {
+        return bookSortTimestamp(b) - bookSortTimestamp(a);
+      });
+    }
+
     function filteredBooksForWorkbench() {
       var status = state.bookStatusFilter || "all";
-      return state.books.filter(function (book) {
+      return sortBooksForWorkbench(state.books.filter(function (book) {
         if (status !== "all" && bookStatus(book) !== status) {
           return false;
         }
         return bookMatchesQuery(book);
-      });
+      }));
     }
 
     function notesForWorkbenchSection(sectionId) {
@@ -1197,8 +1369,15 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
           var type = logic.getNoteType(note);
           return type === "essay" || type === "thought";
         });
+      } else if (sectionId === "favorites") {
+        notes = notes.filter(logic.getNoteFavorite);
+      } else if (sectionId === "tag-detail") {
+        notes = notes.filter(function (note) {
+          return logic.noteMatchesTag(note, state.selectedTag);
+        });
       }
-      return sortNotesByUpdate(notes);
+      notes = notes.filter(noteTypeFilterMatch);
+      return sortNotesForWorkbench(notes);
     }
 
     function selectedBookForWorkbench() {
@@ -1216,6 +1395,15 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       }
       if (!BOOK_STATUS_FILTERS.some(function (filter) { return filter.id === state.bookStatusFilter; })) {
         state.bookStatusFilter = "all";
+      }
+      if (!NOTE_TYPE_FILTERS.some(function (filter) { return filter.id === state.noteTypeFilter; })) {
+        state.noteTypeFilter = "all";
+      }
+      if (!BOOK_SORT_OPTIONS.concat(NOTE_SORT_OPTIONS).some(function (option) { return option.id === state.sortMode; })) {
+        state.sortMode = "updated-desc";
+      }
+      if (state.workspaceSection === "tag-detail" && !state.selectedTag) {
+        state.workspaceSection = "tags";
       }
       var book = selectedBookForWorkbench();
       if (book) {
@@ -1263,12 +1451,16 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       var nav = element("nav", "workbench-nav");
       nav.setAttribute("aria-label", "工作台导航");
       WORKBENCH_SECTIONS.forEach(function (section) {
+        if (section.hidden) return;
         var item = createButton("workbench-nav-item" + (currentWorkbenchSection() === section.id ? " selected" : ""), "");
         item.appendChild(element("span", null, section.label));
         item.appendChild(element("small", null, section.meta));
         item.addEventListener("click", function () {
           state.workspaceSection = section.id;
           state.activeView = section.id === "shelf" ? "shelf" : section.id;
+          state.selectedTag = null;
+          state.noteTypeFilter = "all";
+          state.sortMode = "updated-desc";
           var notes = notesForWorkbenchSection(section.id);
           if (notes.length && section.id !== "shelf" && section.id !== "tags") {
             state.activeNoteId = notes[0].id;
@@ -1281,8 +1473,15 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       });
 
       var footer = element("div", "workbench-sidebar-footer");
-      footer.appendChild(createThemeButton());
-      footer.appendChild(element("span", null, state.books.length + " 本书 · " + state.notes.length + " 条记录"));
+      var footerStats = element("span", null, state.books.length + " 本书 · " + state.notes.length + " 条记录");
+      var footerActions = element("span", "sidebar-footer-actions");
+      footerActions.appendChild(createThemeButton());
+      footerActions.appendChild(createButton("ghost-button compact-data-action", "导出备份"));
+      footerActions.lastChild.addEventListener("click", downloadAllData);
+      footerActions.appendChild(createButton("ghost-button compact-data-action", "导入备份"));
+      footerActions.lastChild.addEventListener("click", triggerDataImport);
+      footer.appendChild(footerStats);
+      footer.appendChild(footerActions);
 
       sidebar.appendChild(brand);
       sidebar.appendChild(nav);
@@ -1300,6 +1499,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       title.appendChild(element("p", "workbench-subtitle", section.meta));
 
       var searchRow = element("div", "workbench-search-row");
+      var searchControl = element("div", "search-control");
       var search = element("input", "search-input workbench-search");
       search.type = "search";
       search.placeholder = "搜索书名、作者、摘录、随笔或标签";
@@ -1308,15 +1508,32 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       search.setAttribute("aria-label", "搜索工作台内容");
       search.addEventListener("input", function (event) {
         state.query = event.target.value;
+        clearSearch.classList.toggle("visible", Boolean(state.query));
         renderWorkbenchResultsOnly();
         scheduleSave();
       });
+      var clearSearch = createButton("search-clear" + (state.query ? " visible" : ""), "清空");
+      clearSearch.setAttribute("aria-label", "清空搜索");
+      clearSearch.addEventListener("click", function () {
+        state.query = "";
+        render();
+        scheduleSave();
+      });
+      searchControl.appendChild(search);
+      searchControl.appendChild(clearSearch);
       var create = createButton("primary-action compact", "+ 新建记录");
       create.addEventListener("click", function () {
         var book = selectedBookForWorkbench();
         createNote(book ? book.id : "");
       });
-      searchRow.appendChild(search);
+      var newBook = createButton("ghost-button compact", "+ 新建书籍");
+      newBook.addEventListener("click", function () {
+        showBookDialog();
+      });
+      searchRow.appendChild(searchControl);
+      if (currentWorkbenchSection() === "shelf") {
+        searchRow.appendChild(newBook);
+      }
       searchRow.appendChild(create);
 
       var filters = createWorkbenchFilters();
@@ -1333,15 +1550,33 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       main.appendChild(header);
       main.appendChild(list);
       renderWorkbenchResultsInto(list);
-      updateWorkbenchSummary();
+      summary.textContent = workbenchSummaryText();
       return main;
     }
 
     function createWorkbenchFilters() {
       var filters = element("div", "workbench-filters");
-      if (currentWorkbenchSection() !== "shelf") {
+      var sectionId = currentWorkbenchSection();
+      if (sectionId === "tags") {
         var section = sectionInfo(currentWorkbenchSection());
         filters.appendChild(element("span", "workbench-filter-note", section.meta));
+        return filters;
+      }
+      if (sectionId !== "shelf") {
+        NOTE_TYPE_FILTERS.forEach(function (filter) {
+          var button = createButton("filter-tab" + ((state.noteTypeFilter || "all") === filter.id ? " active" : ""), filter.label);
+          button.addEventListener("click", function () {
+            state.noteTypeFilter = filter.id;
+            renderWorkbenchResultsOnly();
+            scheduleSave();
+          });
+          filters.appendChild(button);
+        });
+        filters.appendChild(createCompactSelect("排序", NOTE_SORT_OPTIONS, state.sortMode || "updated-desc", function (value) {
+          state.sortMode = value;
+          renderWorkbenchResultsOnly();
+          scheduleSave();
+        }));
         return filters;
       }
       BOOK_STATUS_FILTERS.forEach(function (filter) {
@@ -1353,6 +1588,11 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
         });
         filters.appendChild(button);
       });
+      filters.appendChild(createCompactSelect("排序", BOOK_SORT_OPTIONS, state.sortMode || "updated-desc", function (value) {
+        state.sortMode = value;
+        renderWorkbenchResultsOnly();
+        scheduleSave();
+      }));
       return filters;
     }
 
@@ -1366,9 +1606,16 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
     function updateWorkbenchSummary() {
       var summary = byId("workbenchSummary");
       if (!summary) return;
+      summary.textContent = workbenchSummaryText();
+    }
+
+    function workbenchSummaryText() {
       var section = currentWorkbenchSection();
       var count = section === "shelf" ? filteredBooksForWorkbench().length : section === "tags" ? relatedTagItems().length : notesForWorkbenchSection(section).length;
-      summary.textContent = count + " 项结果 · 点击卡片在右侧查看上下文";
+      if (section === "tag-detail" && state.selectedTag) {
+        return count + " 条相关记录 · " + state.selectedTag.name;
+      }
+      return count + " 项结果 · 点击卡片在右侧查看上下文";
     }
 
     function renderWorkbenchResultsInto(list) {
@@ -1394,10 +1641,21 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
         tags.forEach(function (tag) {
           fragment.appendChild(createWorkbenchTagCard(tag));
         });
+      } else if (section === "recent") {
+        var recentNotes = notesForWorkbenchSection(section);
+        if (!recentNotes.length) {
+          list.appendChild(createEmptyState("还没有可展示的记录。", "新建摘录或随笔后，时间线会按日期整理它们。"));
+          return;
+        }
+        logic.groupNotesByLocalDate(recentNotes).forEach(function (group) {
+          fragment.appendChild(createTimelineGroup(group));
+        });
       } else {
         var notes = notesForWorkbenchSection(section);
         if (!notes.length) {
-          list.appendChild(createEmptyState("没有找到匹配的记录。", "新建摘录或随笔后，它会出现在这里。"));
+          var emptyCopy = section === "favorites" ? "在记录卡片或编辑器里点收藏后，会集中到这里。" : "新建摘录或随笔后，它会出现在这里。";
+          var emptyTitle = section === "favorites" ? "还没有收藏。" : section === "tag-detail" ? "这个标签下暂无记录。" : "没有找到匹配的记录。";
+          list.appendChild(createEmptyState(emptyTitle, emptyCopy));
           return;
         }
         notes.forEach(function (note) {
@@ -1407,11 +1665,51 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       list.appendChild(fragment);
     }
 
+    function createTimelineGroup(group) {
+      var section = element("section", "timeline-group");
+      var heading = element("div", "timeline-date");
+      heading.appendChild(element("strong", null, formatDateLabel(group.date)));
+      heading.appendChild(element("span", null, group.notes.length + " 条记录"));
+      section.appendChild(heading);
+      var list = element("div", "timeline-list");
+      group.notes.forEach(function (note) {
+        list.appendChild(createWorkbenchNoteCard(note));
+      });
+      section.appendChild(list);
+      return section;
+    }
+
+    function formatDateLabel(dateKey) {
+      if (dateKey === "未知日期") return dateKey;
+      var date = new Date(dateKey + "T00:00:00");
+      if (Number.isNaN(date.getTime())) return dateKey;
+      return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
+    }
+
     function createEmptyState(title, copy) {
       var empty = element("div", "empty-state workbench-empty");
       empty.appendChild(element("strong", null, title));
       empty.appendChild(element("span", null, copy));
       return empty;
+    }
+
+    function createFavoriteButton(note, className) {
+      var isFavorite = logic.getNoteFavorite(note);
+      var button = createButton((className || "ghost-button") + " favorite-toggle" + (isFavorite ? " active" : ""), isFavorite ? "已收藏" : "收藏");
+      button.setAttribute("aria-pressed", isFavorite ? "true" : "false");
+      button.addEventListener("click", function (event) {
+        event.stopPropagation();
+        var target = findNoteById(note.id);
+        if (!target) return;
+        var next = !logic.getNoteFavorite(target);
+        logic.setNoteFavorite(target, next);
+        logic.touchNote(target);
+        if (state.data) state.data.notes = state.notes;
+        render();
+        scheduleSave();
+        showToast(next ? "已加入收藏。" : "已取消收藏。");
+      });
+      return button;
     }
 
     function createWorkbenchBookCard(book) {
@@ -1462,6 +1760,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       var head = element("div", "record-card-head");
       head.appendChild(element("span", "record-type", typeLabel(logic.getNoteType(note))));
       head.appendChild(element("span", "record-date", noteUpdatedTime(note)));
+      head.appendChild(createFavoriteButton(note, "ghost-button mini"));
       var book = noteBook(note);
       var quote = logic.getNoteText(note, "quote");
       var edit = createButton("ghost-button note-edit-button", "编辑");
@@ -1488,6 +1787,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
           id: theme.id,
           name: theme.name,
           kind: "主题",
+          logicKind: "theme",
           color: theme.color,
           count: 0,
         };
@@ -1500,7 +1800,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
         logic.getNoteTags(note).forEach(function (tag) {
           var key = "tag:" + tag;
           if (!map[key]) {
-            map[key] = { id: tag, name: tag, kind: "标签", color: "#b28a55", count: 0 };
+            map[key] = { id: tag, name: tag, kind: "标签", logicKind: "tag", color: "#b28a55", count: 0 };
           }
           map[key].count += 1;
         });
@@ -1518,9 +1818,21 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       var card = createButton("workbench-card tag-index-card", "");
       card.style.setProperty("--tag-color", tag.color || "#4f6f5e");
       card.addEventListener("click", function () {
-        state.query = tag.name;
-        state.workspaceSection = tag.kind === "标签" ? "recent" : "quotes";
+        state.selectedTag = {
+          kind: tag.logicKind || (tag.kind === "主题" ? "theme" : "tag"),
+          id: tag.id,
+          name: tag.name,
+        };
+        state.query = "";
+        state.noteTypeFilter = "all";
+        state.sortMode = "updated-desc";
+        state.workspaceSection = "tag-detail";
         state.activeView = state.workspaceSection;
+        var notes = notesForWorkbenchSection("tag-detail");
+        if (notes[0]) {
+          state.activeNoteId = notes[0].id;
+          state.activeBookId = logic.getNoteBookId(notes[0]);
+        }
         render();
         scheduleSave();
       });
@@ -1659,6 +1971,170 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
         });
     }
 
+    function updateStateBooks() {
+      if (state.data) state.data.books = state.books;
+    }
+
+    function createBook(values) {
+      var now = new Date().toISOString();
+      var book = {
+        id: "book-" + Date.now().toString(36),
+        title: String(values.title || "未命名书籍").trim(),
+        author: String(values.author || "").trim(),
+        authors: values.author ? [String(values.author).trim()] : [],
+        coverColor: values.coverColor || "#687767",
+        coverImage: values.coverImage || "",
+        status: values.status || "reading",
+        createdAt: now,
+        updatedAt: now,
+      };
+      book.coverImage = book.coverImage || "assets/covers/book-slow-reading.png";
+      state.books.unshift(book);
+      updateStateBooks();
+      state.activeBookId = book.id;
+      state.workspaceSection = "shelf";
+      state.activeView = "book";
+      render();
+      scheduleSave();
+      showToast("已创建书籍。");
+      return book;
+    }
+
+    function updateBook(bookId, values) {
+      var book = state.books.find(function (item) { return item.id === bookId; });
+      if (!book) return null;
+      book.title = String(values.title || "未命名书籍").trim();
+      book.author = String(values.author || "").trim();
+      book.authors = book.author ? [book.author] : [];
+      book.status = values.status || "reading";
+      if (values.coverImage) book.coverImage = values.coverImage;
+      book.updatedAt = new Date().toISOString();
+      updateStateBooks();
+      render();
+      scheduleSave();
+      showToast("书籍信息已更新。");
+      return book;
+    }
+
+    function deleteBook(bookId) {
+      var book = state.books.find(function (item) { return item.id === bookId; });
+      if (!book) return;
+      var notes = logic.getBookNotes(state, book.id, "all", "");
+      if (notes.length) {
+        showToast("这本书还有摘录或随笔，暂不能删除。");
+        return;
+      }
+      if (state.books.length <= 1) {
+        showToast("至少保留一本书。");
+        return;
+      }
+      state.books = state.books.filter(function (item) { return item.id !== book.id; });
+      updateStateBooks();
+      state.activeBookId = state.books[0] ? state.books[0].id : "";
+      render();
+      scheduleSave();
+      showToast("书籍已删除。");
+    }
+
+    function createDialogField(label, input) {
+      var field = element("label", "dialog-field");
+      field.appendChild(element("span", null, label));
+      field.appendChild(input);
+      return field;
+    }
+
+    function showBookDialog(book) {
+      var dialog = byId("formDialog");
+      var card = byId("formDialogCard");
+      if (!dialog || !card) return;
+      clearElement(card);
+
+      var title = element("div", "dialog-title");
+      title.appendChild(element("strong", null, book ? "编辑书籍" : "新建书籍"));
+      title.appendChild(element("span", null, book ? "修改书籍信息和阅读状态。" : "添加一本用于记录摘录和随笔的书。"));
+
+      var titleInput = element("input");
+      titleInput.name = "title";
+      titleInput.required = true;
+      titleInput.value = book ? book.title : "";
+      titleInput.placeholder = "书名";
+
+      var authorInput = element("input");
+      authorInput.name = "author";
+      authorInput.value = book ? book.author || "" : "";
+      authorInput.placeholder = "作者";
+
+      var statusSelect = element("select");
+      statusSelect.name = "status";
+      BOOK_STATUS_FILTERS.filter(function (item) { return item.id !== "all"; }).forEach(function (item) {
+        var option = element("option", null, item.label);
+        option.value = item.id;
+        option.selected = (book ? bookStatus(book) : "reading") === item.id;
+        statusSelect.appendChild(option);
+      });
+
+      var coverInput = element("input");
+      coverInput.type = "file";
+      coverInput.accept = "image/png,image/jpeg,image/webp,image/gif,image/*";
+
+      var actions = element("div", "dialog-actions");
+      var cancel = createButton("ghost-button", "取消");
+      cancel.addEventListener("click", function () {
+        dialog.close();
+      });
+      var submit = element("button", "primary-action compact", book ? "保存书籍" : "创建书籍");
+      submit.type = "submit";
+      actions.appendChild(cancel);
+      actions.appendChild(submit);
+
+      card.appendChild(title);
+      card.appendChild(createDialogField("书名", titleInput));
+      card.appendChild(createDialogField("作者", authorInput));
+      card.appendChild(createDialogField("阅读状态", statusSelect));
+      card.appendChild(createDialogField("封面图片（可选）", coverInput));
+      card.appendChild(actions);
+
+      card.onsubmit = function (event) {
+        event.preventDefault();
+        var values = {
+          title: titleInput.value,
+          author: authorInput.value,
+          status: statusSelect.value,
+        };
+        var file = coverInput.files && coverInput.files[0];
+        var save = function (coverImage) {
+          if (coverImage) values.coverImage = coverImage;
+          if (book) {
+            updateBook(book.id, values);
+          } else {
+            createBook(values);
+          }
+          dialog.close();
+        };
+
+        if (file) {
+          submit.disabled = true;
+          submit.textContent = "处理中";
+          prepareCoverImage(file)
+            .then(save)
+            .catch(function () {
+              submit.disabled = false;
+              submit.textContent = book ? "保存书籍" : "创建书籍";
+              showToast("请选择有效的图片文件。");
+            });
+          return;
+        }
+        save("");
+      };
+
+      if (dialog.showModal) {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "open");
+      }
+      titleInput.focus();
+    }
+
     function bookThemeTabs(book, limit) {
       var holder = element("span", "book-theme-tabs");
       var seen = Object.create(null);
@@ -1702,6 +2178,10 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
 
     function createWorkbenchDetail() {
       var panel = element("aside", "workbench-detail");
+      if (currentWorkbenchSection() === "tag-detail" && state.selectedTag) {
+        panel.appendChild(createTagDetailPanel());
+        return panel;
+      }
       var book = selectedBookForWorkbench();
       if (!book) {
         panel.appendChild(createEmptyState("还没有书籍。", "导入或创建书籍后，这里会显示上下文。"));
@@ -1723,6 +2203,83 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       panel.appendChild(createDetailEssayEntry(book, essays));
       panel.appendChild(createDetailTags(book, notes));
       return panel;
+    }
+
+    function createTagDetailPanel() {
+      var fragment = document.createDocumentFragment();
+      var tag = state.selectedTag;
+      var notes = notesForWorkbenchSection("tag-detail");
+      var booksById = Object.create(null);
+      notes.forEach(function (note) {
+        var book = noteBook(note);
+        if (book) booksById[book.id] = book;
+      });
+      var books = Object.keys(booksById).map(function (bookId) { return booksById[bookId]; });
+      var quotes = notes.filter(function (note) { return logic.getNoteType(note) === "quote"; }).length;
+      var essays = notes.length - quotes;
+
+      var summary = createDetailSection(tag.kind === "theme" ? "主题详情" : "标签详情");
+      var card = element("div", "tag-detail-summary");
+      card.appendChild(element("span", "tag-index-kind", tag.kind === "theme" ? "主题" : "标签"));
+      card.appendChild(element("strong", null, tag.kind === "tag" ? "#" + tag.name : tag.name));
+      card.appendChild(element("p", null, notes.length + " 条记录 · " + books.length + " 本书 · " + quotes + " 条摘录 · " + essays + " 条随笔/感想"));
+      var back = createButton("ghost-button", "返回标签索引");
+      back.addEventListener("click", function () {
+        state.workspaceSection = "tags";
+        state.selectedTag = null;
+        state.query = "";
+        render();
+        scheduleSave();
+      });
+      card.appendChild(back);
+      summary.appendChild(card);
+      fragment.appendChild(summary);
+
+      var bookSection = createDetailSection("相关书籍");
+      var bookList = element("div", "tag-related-books");
+      if (!books.length) {
+        bookList.appendChild(element("p", "detail-empty", "暂无关联书籍"));
+      } else {
+        books.forEach(function (book) {
+          var item = createButton("tag-related-book", "");
+          item.addEventListener("click", function () {
+            state.activeBookId = book.id;
+            state.workspaceSection = "shelf";
+            state.selectedTag = null;
+            render();
+            scheduleSave();
+          });
+          item.appendChild(createBookCover(book, "tag-book-cover"));
+          var copy = element("span", null);
+          copy.appendChild(element("strong", null, book.title));
+          copy.appendChild(element("small", null, book.author || "未填写作者"));
+          item.appendChild(copy);
+          bookList.appendChild(item);
+        });
+      }
+      bookSection.appendChild(bookList);
+      fragment.appendChild(bookSection);
+
+      var recordSection = createDetailSection("最近记录");
+      var recordList = element("div", "detail-quote-list");
+      notes.slice(0, 5).forEach(function (note) {
+        var item = createButton("detail-quote-item", "");
+        item.addEventListener("click", function () {
+          state.activeNoteId = note.id;
+          state.activeBookId = logic.getNoteBookId(note);
+          renderWorkbenchView();
+          scheduleSave();
+        });
+        item.appendChild(element("span", null, typeLabel(logic.getNoteType(note)) + " · " + noteUpdatedTime(note)));
+        item.appendChild(element("strong", null, logic.getNoteTitle(note)));
+        recordList.appendChild(item);
+      });
+      if (!recordList.children.length) {
+        recordList.appendChild(element("p", "detail-empty", "暂无相关记录"));
+      }
+      recordSection.appendChild(recordList);
+      fragment.appendChild(recordSection);
+      return fragment;
     }
 
     function createDetailSection(title) {
@@ -1747,10 +2304,32 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       newNote.addEventListener("click", function () {
         createNote(book.id);
       });
+      var statusSelect = createCompactSelect("状态", BOOK_STATUS_FILTERS.filter(function (item) {
+        return item.id !== "all";
+      }), bookStatus(book), function (value) {
+        book.status = value;
+        book.updatedAt = new Date().toISOString();
+        updateStateBooks();
+        render();
+        scheduleSave();
+        showToast("阅读状态已更新。");
+      });
+      statusSelect.classList.add("detail-status-select");
+      var editBook = createButton("ghost-button", "编辑书籍");
+      editBook.addEventListener("click", function () {
+        showBookDialog(book);
+      });
+      var removeBook = createButton("ghost-button danger", "删除书籍");
+      removeBook.addEventListener("click", function () {
+        deleteBook(book.id);
+      });
       actions.appendChild(newNote);
+      actions.appendChild(editBook);
       actions.appendChild(createCoverImportControl(book));
+      actions.appendChild(removeBook);
 
       section.appendChild(summary);
+      section.appendChild(statusSelect);
       section.appendChild(actions);
       return section;
     }
@@ -1769,6 +2348,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
         card.appendChild(element("blockquote", "quote-snippet", shortText(logic.getNoteText(note, "quote"), 128)));
       }
       card.appendChild(element("p", null, shortText(logic.getNoteSummaryText(note), 128) || "还没有正文。"));
+      card.appendChild(createFavoriteButton(note, "ghost-button"));
       var edit = createButton("ghost-button", "打开编辑器");
       edit.addEventListener("click", function () {
         goEditor(note.id);
@@ -2004,6 +2584,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       var deleteButton = createButton("ghost-button danger secondary-action", "删除");
       deleteButton.addEventListener("click", deleteActiveNote);
       actions.appendChild(focusButton);
+      actions.appendChild(createFavoriteButton(note, "ghost-button secondary-action"));
       actions.appendChild(preview);
       actions.appendChild(exportButton);
       actions.appendChild(deleteButton);
@@ -2256,6 +2837,9 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       state.activeBookId = "";
       state.bookFilter = "all";
       state.query = "";
+      state.selectedTag = null;
+      state.noteTypeFilter = "all";
+      state.sortMode = "updated-desc";
       render();
     }
 
@@ -2265,6 +2849,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       state.workspaceSection = "shelf";
       state.bookFilter = "all";
       state.query = "";
+      state.selectedTag = null;
       render();
     }
 
@@ -2355,6 +2940,57 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       anchor.remove();
       URL.revokeObjectURL(anchor.href);
       showToast("已导出 Markdown。");
+    }
+
+    function backupCurrentState() {
+      try {
+        window.localStorage.setItem(logic.STORAGE_KEY + ":backup:manual:" + Date.now(), JSON.stringify(logic.serializeState(state)));
+      } catch (error) {
+        // Import can still proceed if localStorage cannot keep an extra backup.
+      }
+    }
+
+    function downloadAllData() {
+      var data = JSON.stringify(logic.serializeState(state), null, 2);
+      var blob = new Blob([data], { type: "application/json;charset=utf-8" });
+      var anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = "modu-notes-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(anchor.href);
+      showToast("已导出完整备份。");
+    }
+
+    function triggerDataImport() {
+      var input = byId("dataImportInput");
+      if (input) input.click();
+    }
+
+    function importAllData(file) {
+      if (!file) return;
+      if (!/json/i.test(file.type || "") && !/\.json$/i.test(file.name || "")) {
+        showToast("请选择 JSON 备份文件。");
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var imported = logic.normalizeImportedState(reader.result);
+          backupCurrentState();
+          state = normalizeStateV2(imported);
+          persistNow();
+          render();
+          showToast("备份已导入。");
+        } catch (error) {
+          showToast("导入失败，请检查文件格式。");
+        }
+      };
+      reader.onerror = function () {
+        showToast("文件读取失败，请重新选择。");
+      };
+      reader.readAsText(file, "utf-8");
     }
 
     function showToast(message) {
@@ -2667,6 +3303,14 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       byId("closePreviewButton").addEventListener("click", function () {
         byId("previewDialog").close();
       });
+      var dataImportInput = byId("dataImportInput");
+      if (dataImportInput) {
+        dataImportInput.addEventListener("change", function (event) {
+          var file = event.target.files && event.target.files[0];
+          importAllData(file);
+          event.target.value = "";
+        });
+      }
       document.addEventListener("selectionchange", updateToolbarFromSelection);
       document.addEventListener("keydown", function (event) {
         if (event.key === "Escape") hideToolbar();
