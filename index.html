@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>墨读札记｜阅读随笔记录</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script>
+    (function() {
+      var theme = localStorage.getItem('reading-notes-theme');
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div class="app-shell" id="appShell">
+    <main class="view-stage" id="viewStage" aria-live="polite"></main>
+  </div>
+
+  <div class="floating-toolbar" id="floatingToolbar" role="toolbar" aria-label="富文本编辑工具">
+    <span class="tool-group-label">文字</span>
+    <button class="tool-button" data-command="bold" type="button" title="加粗 (Ctrl+B)"><b>B</b></button>
+    <button class="tool-button" data-command="italic" type="button" title="斜体 (Ctrl+I)"><i>I</i></button>
+    <button class="tool-button" data-command="underline" type="button" title="下划线 (Ctrl+U)"><span class="tool-icon-underline">U</span></button>
+    <button class="tool-button" data-command="strikeThrough" type="button" title="删除线"><span class="tool-icon-strike">S</span></button>
+    <span class="tool-divider" role="separator"></span>
+    <span class="tool-group-label">段落</span>
+    <button class="tool-button" data-command="formatBlock" data-value="h2" type="button" title="二级标题">H</button>
+    <button class="tool-button" data-command="formatBlock" data-value="h3" type="button" title="三级标题"><span class="tool-icon-h3">H<sub>3</sub></span></button>
+    <button class="tool-button" data-command="formatBlock" data-value="blockquote" type="button" title="引用">&ldquo;</button>
+    <span class="tool-divider" role="separator"></span>
+    <span class="tool-group-label">列表</span>
+    <button class="tool-button" data-command="insertOrderedList" type="button" title="有序列表">1.</button>
+    <button class="tool-button" data-command="insertUnorderedList" type="button" title="无序列表">&bull;</button>
+    <span class="tool-divider" role="separator"></span>
+    <span class="tool-group-label">特殊</span>
+    <button class="tool-button" data-command="hiliteColor" type="button" title="高亮标记"><span class="tool-icon-highlight">H</span></button>
+    <button class="tool-button" data-command="inlineCode" type="button" title="行内代码">&lt;/&gt;</button>
+    <button class="tool-button" data-command="codeBlock" type="button" title="代码块"><span class="tool-icon-codeblock">{ }</span></button>
+    <button class="tool-button" data-command="insertHorizontalRule" type="button" title="分割线">&mdash;</button>
+    <span class="tool-divider" role="separator"></span>
+    <button class="tool-button tool-button-clear" data-command="removeFormat" type="button" title="清除格式">T<sub>x</sub></button>
+  </div>
+
+  <dialog class="preview-dialog" id="previewDialog">
+    <div class="preview-card">
+      <button class="dialog-close" id="closePreviewButton" type="button" aria-label="关闭预览">&times;</button>
+      <pre id="previewContent"></pre>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
