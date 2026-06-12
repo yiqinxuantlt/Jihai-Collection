@@ -64,24 +64,28 @@
         title: "如何阅读一本书",
         author: "莫提默·J. 艾德勒 / 查尔斯·范多伦",
         coverColor: "#4f6f52",
+        status: "reading",
       },
       {
         id: "book-design-everyday",
         title: "设计心理学",
         author: "唐纳德·A. 诺曼",
         coverColor: "#d66f42",
+        status: "finished",
       },
       {
         id: "book-story",
         title: "故事",
         author: "罗伯特·麦基",
         coverColor: "#315c8c",
+        status: "reading",
       },
       {
         id: "book-walden",
         title: "瓦尔登湖",
         author: "亨利·戴维·梭罗",
         coverColor: "#7c8f5b",
+        status: "planned",
       },
     ]);
 
@@ -848,6 +852,19 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       { id: "essay", label: "随笔" },
       { id: "thought", label: "感想" },
     ];
+    var WORKBENCH_SECTIONS = [
+      { id: "shelf", label: "我的书架", meta: "按书籍组织摘录与随笔" },
+      { id: "quotes", label: "全部摘录", meta: "所有可复读的原文片段" },
+      { id: "essays", label: "随笔", meta: "由摘录生长出的想法" },
+      { id: "tags", label: "标签", meta: "主题与关键词索引" },
+      { id: "recent", label: "最近阅读", meta: "按更新时间回到现场" },
+    ];
+    var BOOK_STATUS_FILTERS = [
+      { id: "all", label: "全部" },
+      { id: "reading", label: "正在读" },
+      { id: "finished", label: "已读" },
+      { id: "planned", label: "待读" },
+    ];
     var PROMPTS = [
       "这段文字真正改变了你对哪个概念的理解？",
       "把这条记录压缩成一句可复述的观点。",
@@ -902,9 +919,14 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       migrated.activeView = "shelf";
       migrated.activeBookId = "";
       migrated.bookFilter = "all";
+      migrated.workspaceSection = "shelf";
+      migrated.bookStatusFilter = "all";
       migrated.query = migrated.query || "";
       migrated.activeNoteId = migrated.activeNoteId || (migrated.notes[0] && migrated.notes[0].id) || "";
-      return logic.migrateState(migrated);
+      var finalState = logic.migrateState(migrated);
+      finalState.workspaceSection = "shelf";
+      finalState.bookStatusFilter = "all";
+      return finalState;
     }
 
     function normalizeState(nextState) {
@@ -917,6 +939,8 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       safeState.activeBookId = "";
       safeState.activeNoteId = safeState.activeNoteId || safeState.notes[0].id;
       safeState.bookFilter = "all";
+      safeState.workspaceSection = "shelf";
+      safeState.bookStatusFilter = "all";
       safeState.editorFocusMode = Boolean(safeState.editorFocusMode);
       safeState.query = safeState.query || "";
       safeState.notes.forEach(function (note) {
@@ -1100,111 +1124,410 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       return [book.title, book.author, noteText].join(" ").toLowerCase().indexOf(query) !== -1;
     }
 
+    function validWorkbenchSection(sectionId) {
+      return WORKBENCH_SECTIONS.some(function (section) {
+        return section.id === sectionId;
+      });
+    }
+
+    function currentWorkbenchSection() {
+      if (!validWorkbenchSection(state.workspaceSection)) {
+        state.workspaceSection = state.activeView === "book" ? "shelf" : "shelf";
+      }
+      return state.workspaceSection;
+    }
+
+    function sectionInfo(sectionId) {
+      return WORKBENCH_SECTIONS.find(function (section) {
+        return section.id === sectionId;
+      }) || WORKBENCH_SECTIONS[0];
+    }
+
+    function bookStatus(book) {
+      return book && book.status ? book.status : "reading";
+    }
+
+    function bookStatusLabel(status) {
+      var match = BOOK_STATUS_FILTERS.find(function (item) {
+        return item.id === status;
+      });
+      return match ? match.label : "正在读";
+    }
+
+    function noteMatchesQueryText(note) {
+      var query = String(state.query || "").trim().toLowerCase();
+      if (!query) return true;
+      var book = noteBook(note);
+      var themeText = noteThemes(note).map(function (theme) {
+        return theme.name;
+      }).join(" ");
+      return [
+        logic.getNoteSearchText(note, state),
+        book && book.title,
+        book && book.author,
+        themeText,
+        logic.getNoteTags(note).join(" "),
+      ].filter(Boolean).join(" ").toLowerCase().indexOf(query) !== -1;
+    }
+
+    function sortNotesByUpdate(notes) {
+      return notes.slice().sort(function (a, b) {
+        return new Date(logic.getNoteUpdatedAt(b)).getTime() - new Date(logic.getNoteUpdatedAt(a)).getTime();
+      });
+    }
+
+    function filteredBooksForWorkbench() {
+      var status = state.bookStatusFilter || "all";
+      return state.books.filter(function (book) {
+        if (status !== "all" && bookStatus(book) !== status) {
+          return false;
+        }
+        return bookMatchesQuery(book);
+      });
+    }
+
+    function notesForWorkbenchSection(sectionId) {
+      var notes = state.notes.filter(noteMatchesQueryText);
+      if (sectionId === "quotes") {
+        notes = notes.filter(function (note) {
+          return logic.getNoteType(note) === "quote";
+        });
+      } else if (sectionId === "essays") {
+        notes = notes.filter(function (note) {
+          var type = logic.getNoteType(note);
+          return type === "essay" || type === "thought";
+        });
+      }
+      return sortNotesByUpdate(notes);
+    }
+
+    function selectedBookForWorkbench() {
+      var book = activeBook();
+      if (book) return book;
+      var note = activeNote();
+      book = note ? noteBook(note) : null;
+      if (book) return book;
+      return state.books[0] || null;
+    }
+
+    function syncWorkbenchContext() {
+      if (!validWorkbenchSection(state.workspaceSection)) {
+        state.workspaceSection = "shelf";
+      }
+      if (!BOOK_STATUS_FILTERS.some(function (filter) { return filter.id === state.bookStatusFilter; })) {
+        state.bookStatusFilter = "all";
+      }
+      var book = selectedBookForWorkbench();
+      if (book) {
+        state.activeBookId = book.id;
+      }
+      if (!activeNote() && state.notes[0]) {
+        state.activeNoteId = state.notes[0].id;
+      }
+    }
+
     function render() {
       hideToolbar();
-      if (state.activeView === "book") {
-        renderBookView();
-      } else if (state.activeView === "editor") {
+      if (state.activeView === "editor") {
         renderEditorView();
       } else {
-        renderShelfView();
+        renderWorkbenchView();
       }
       persistNow();
     }
 
     function renderShelfView() {
+      state.workspaceSection = "shelf";
+      renderWorkbenchView();
+    }
+
+    function renderWorkbenchView() {
+      syncWorkbenchContext();
       var stage = byId("viewStage");
       clearElement(stage);
-      stage.className = "view-stage shelf-stage";
-      stage.appendChild(createShelfHeader());
-      stage.appendChild(createShelfGrid());
+      stage.className = "view-stage workbench-stage";
+      stage.appendChild(createWorkbenchSidebar());
+      stage.appendChild(createWorkbenchMain());
+      stage.appendChild(createWorkbenchDetail());
     }
 
-    function createShelfHeader() {
-      var header = element("header", "shelf-hero");
-      var intro = element("div", "shelf-intro");
-      var seal = element("div", "seal", "墨");
-      var copy = element("div");
-      copy.appendChild(element("p", "eyebrow", "Quiet Reading Desk"));
-      copy.appendChild(element("h1", null, "墨读札记"));
-      copy.appendChild(element("p", "hero-copy", "先从书架进入，再沉到每本书自己的摘录、随笔和感想里。"));
-      intro.appendChild(seal);
-      intro.appendChild(copy);
+    function createWorkbenchSidebar() {
+      var sidebar = element("aside", "workbench-sidebar");
+      var brand = element("div", "workbench-brand");
+      brand.appendChild(element("span", "workbench-mark", "墨"));
+      var brandText = element("span", "workbench-brand-copy");
+      brandText.appendChild(element("strong", null, "墨读札记"));
+      brandText.appendChild(element("small", null, "阅读随笔工作台"));
+      brand.appendChild(brandText);
 
-      var tools = element("div", "shelf-toolbar");
-      var search = element("input", "search-input");
+      var nav = element("nav", "workbench-nav");
+      nav.setAttribute("aria-label", "工作台导航");
+      WORKBENCH_SECTIONS.forEach(function (section) {
+        var item = createButton("workbench-nav-item" + (currentWorkbenchSection() === section.id ? " selected" : ""), "");
+        item.appendChild(element("span", null, section.label));
+        item.appendChild(element("small", null, section.meta));
+        item.addEventListener("click", function () {
+          state.workspaceSection = section.id;
+          state.activeView = section.id === "shelf" ? "shelf" : section.id;
+          var notes = notesForWorkbenchSection(section.id);
+          if (notes.length && section.id !== "shelf" && section.id !== "tags") {
+            state.activeNoteId = notes[0].id;
+            state.activeBookId = logic.getNoteBookId(notes[0]);
+          }
+          render();
+          scheduleSave();
+        });
+        nav.appendChild(item);
+      });
+
+      var footer = element("div", "workbench-sidebar-footer");
+      footer.appendChild(createThemeButton());
+      footer.appendChild(element("span", null, state.books.length + " 本书 · " + state.notes.length + " 条记录"));
+
+      sidebar.appendChild(brand);
+      sidebar.appendChild(nav);
+      sidebar.appendChild(footer);
+      return sidebar;
+    }
+
+    function createWorkbenchMain() {
+      var main = element("section", "workbench-main");
+      var section = sectionInfo(currentWorkbenchSection());
+      var header = element("header", "workbench-main-header");
+      var title = element("div", "workbench-title");
+      title.appendChild(element("p", "eyebrow", "Reading Knowledge Desk"));
+      title.appendChild(element("h1", null, section.label));
+      title.appendChild(element("p", "workbench-subtitle", section.meta));
+
+      var searchRow = element("div", "workbench-search-row");
+      var search = element("input", "search-input workbench-search");
       search.type = "search";
-      search.placeholder = "搜索书名、作者、摘录或主题";
+      search.placeholder = "搜索书名、作者、摘录、随笔或标签";
       search.value = state.query || "";
-      search.setAttribute("aria-label", "搜索书名、作者、摘录或主题");
+      search.id = "workspaceSearch";
+      search.setAttribute("aria-label", "搜索工作台内容");
       search.addEventListener("input", function (event) {
         state.query = event.target.value;
-        renderShelfBooksOnly();
-        updateShelfStats();
+        renderWorkbenchResultsOnly();
         scheduleSave();
       });
-      tools.appendChild(search);
-      tools.appendChild(createThemeButton());
-
-      var stats = element("div", "shelf-stats", null);
-      stats.id = "shelfStats";
-
-      header.appendChild(intro);
-      header.appendChild(tools);
-      header.appendChild(stats);
-      window.requestAnimationFrame(updateShelfStats);
-      return header;
-    }
-
-    function updateShelfStats() {
-      var stats = byId("shelfStats");
-      if (!stats) return;
-      clearElement(stats);
-      [
-        { label: "书籍", value: state.books.length },
-        { label: "记录", value: state.notes.length },
-        {
-          label: "字数",
-          value: state.notes.reduce(function (sum, note) {
-            return sum + countWords(note);
-          }, 0),
-        },
-      ].forEach(function (item) {
-        var card = element("div", "shelf-stat");
-        card.appendChild(element("strong", null, String(item.value)));
-        card.appendChild(element("span", null, item.label));
-        stats.appendChild(card);
+      var create = createButton("primary-action compact", "+ 新建记录");
+      create.addEventListener("click", function () {
+        var book = selectedBookForWorkbench();
+        createNote(book ? book.id : "");
       });
+      searchRow.appendChild(search);
+      searchRow.appendChild(create);
+
+      var filters = createWorkbenchFilters();
+      var summary = element("p", "workbench-result-summary");
+      summary.id = "workbenchSummary";
+
+      header.appendChild(title);
+      header.appendChild(searchRow);
+      header.appendChild(filters);
+      header.appendChild(summary);
+
+      var list = element("div", "workbench-results");
+      list.id = "workbenchResults";
+      main.appendChild(header);
+      main.appendChild(list);
+      renderWorkbenchResultsInto(list);
+      updateWorkbenchSummary();
+      return main;
     }
 
-    function createShelfGrid() {
-      var section = element("section", "shelf-content");
-      var grid = element("div", "book-grid");
-      grid.id = "bookGrid";
-      section.appendChild(grid);
-      renderShelfBooksInto(grid);
-      return section;
-    }
-
-    function renderShelfBooksOnly() {
-      var grid = byId("bookGrid");
-      if (!grid) return;
-      renderShelfBooksInto(grid);
-    }
-
-    function renderShelfBooksInto(grid) {
-      clearElement(grid);
-      var visibleBooks = state.books.filter(bookMatchesQuery);
-      if (!visibleBooks.length) {
-        grid.appendChild(element("p", "empty-state", "没有找到匹配的书。"));
-        return;
+    function createWorkbenchFilters() {
+      var filters = element("div", "workbench-filters");
+      if (currentWorkbenchSection() !== "shelf") {
+        var section = sectionInfo(currentWorkbenchSection());
+        filters.appendChild(element("span", "workbench-filter-note", section.meta));
+        return filters;
       }
-
-      var fragment = document.createDocumentFragment();
-      visibleBooks.forEach(function (book) {
-        fragment.appendChild(createBookCard(book));
+      BOOK_STATUS_FILTERS.forEach(function (filter) {
+        var button = createButton("filter-tab" + ((state.bookStatusFilter || "all") === filter.id ? " active" : ""), filter.label);
+        button.addEventListener("click", function () {
+          state.bookStatusFilter = filter.id;
+          renderWorkbenchResultsOnly();
+          scheduleSave();
+        });
+        filters.appendChild(button);
       });
-      grid.appendChild(fragment);
+      return filters;
+    }
+
+    function renderWorkbenchResultsOnly() {
+      var list = byId("workbenchResults");
+      if (!list) return;
+      renderWorkbenchResultsInto(list);
+      updateWorkbenchSummary();
+    }
+
+    function updateWorkbenchSummary() {
+      var summary = byId("workbenchSummary");
+      if (!summary) return;
+      var section = currentWorkbenchSection();
+      var count = section === "shelf" ? filteredBooksForWorkbench().length : section === "tags" ? relatedTagItems().length : notesForWorkbenchSection(section).length;
+      summary.textContent = count + " 项结果 · 点击卡片在右侧查看上下文";
+    }
+
+    function renderWorkbenchResultsInto(list) {
+      clearElement(list);
+      var section = currentWorkbenchSection();
+      var fragment = document.createDocumentFragment();
+
+      if (section === "shelf") {
+        var books = filteredBooksForWorkbench();
+        if (!books.length) {
+          list.appendChild(createEmptyState("没有找到匹配的书籍。", "换个关键词，或切回全部状态。"));
+          return;
+        }
+        books.forEach(function (book) {
+          fragment.appendChild(createWorkbenchBookCard(book));
+        });
+      } else if (section === "tags") {
+        var tags = relatedTagItems();
+        if (!tags.length) {
+          list.appendChild(createEmptyState("还没有可索引的标签。", "在记录元信息里添加主题或标签后会出现在这里。"));
+          return;
+        }
+        tags.forEach(function (tag) {
+          fragment.appendChild(createWorkbenchTagCard(tag));
+        });
+      } else {
+        var notes = notesForWorkbenchSection(section);
+        if (!notes.length) {
+          list.appendChild(createEmptyState("没有找到匹配的记录。", "新建摘录或随笔后，它会出现在这里。"));
+          return;
+        }
+        notes.forEach(function (note) {
+          fragment.appendChild(createWorkbenchNoteCard(note));
+        });
+      }
+      list.appendChild(fragment);
+    }
+
+    function createEmptyState(title, copy) {
+      var empty = element("div", "empty-state workbench-empty");
+      empty.appendChild(element("strong", null, title));
+      empty.appendChild(element("span", null, copy));
+      return empty;
+    }
+
+    function createWorkbenchBookCard(book) {
+      var notes = logic.getBookNotes(state, book.id, "all", "");
+      var card = createButton("workbench-card workbench-book-card" + (state.activeBookId === book.id ? " selected" : ""), "");
+      card.style.setProperty("--book-color", book.coverColor || "#687767");
+      card.addEventListener("click", function () {
+        state.activeBookId = book.id;
+        state.activeView = "book";
+        var firstNote = sortNotesByUpdate(notes)[0];
+        if (firstNote) state.activeNoteId = firstNote.id;
+        renderWorkbenchView();
+        scheduleSave();
+      });
+
+      var content = element("span", "workbench-card-content");
+      var meta = element("span", "workbench-card-meta");
+      meta.appendChild(element("span", "status-dot " + bookStatus(book), bookStatusLabel(bookStatus(book))));
+      meta.appendChild(element("span", null, notes.length + " 条记录"));
+      content.appendChild(meta);
+      content.appendChild(element("strong", null, book.title));
+      content.appendChild(element("span", "workbench-card-author", book.author || "未填写作者"));
+      content.appendChild(element("span", "workbench-card-summary", notes[0] ? shortText(logic.getNoteSummaryText(notes[0]), 86) : "还没有摘录或随笔。"));
+      content.appendChild(bookThemeTabs(book, 3));
+
+      card.appendChild(createBookCover(book, "workbench-cover"));
+      card.appendChild(content);
+      return card;
+    }
+
+    function createWorkbenchNoteCard(note) {
+      var card = element("article", "workbench-card workbench-note-card" + (state.activeNoteId === note.id ? " selected" : ""));
+      card.tabIndex = 0;
+      card.addEventListener("click", function () {
+        state.activeNoteId = note.id;
+        state.activeBookId = logic.getNoteBookId(note);
+        renderWorkbenchView();
+        scheduleSave();
+      });
+      card.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          state.activeNoteId = note.id;
+          state.activeBookId = logic.getNoteBookId(note);
+          renderWorkbenchView();
+        }
+      });
+
+      var head = element("div", "record-card-head");
+      head.appendChild(element("span", "record-type", typeLabel(logic.getNoteType(note))));
+      head.appendChild(element("span", "record-date", noteUpdatedTime(note)));
+      var book = noteBook(note);
+      var quote = logic.getNoteText(note, "quote");
+      var edit = createButton("ghost-button note-edit-button", "编辑");
+      edit.addEventListener("click", function (event) {
+        event.stopPropagation();
+        goEditor(note.id);
+      });
+
+      card.appendChild(head);
+      card.appendChild(element("strong", null, logic.getNoteTitle(note)));
+      card.appendChild(element("span", "workbench-card-author", book ? book.title : "未关联书籍"));
+      if (quote && logic.getNoteType(note) !== "thought") {
+        card.appendChild(element("blockquote", "quote-snippet", shortText(quote, 96)));
+      }
+      card.appendChild(element("p", "workbench-card-summary", shortText(logic.getNoteSummaryText(note), 118) || "还没有正文。"));
+      card.appendChild(edit);
+      return card;
+    }
+
+    function relatedTagItems() {
+      var map = Object.create(null);
+      state.themes.forEach(function (theme) {
+        map["theme:" + theme.id] = {
+          id: theme.id,
+          name: theme.name,
+          kind: "主题",
+          color: theme.color,
+          count: 0,
+        };
+      });
+      state.notes.forEach(function (note) {
+        noteThemes(note).forEach(function (theme) {
+          var key = "theme:" + theme.id;
+          if (map[key]) map[key].count += 1;
+        });
+        logic.getNoteTags(note).forEach(function (tag) {
+          var key = "tag:" + tag;
+          if (!map[key]) {
+            map[key] = { id: tag, name: tag, kind: "标签", color: "#b28a55", count: 0 };
+          }
+          map[key].count += 1;
+        });
+      });
+      return Object.keys(map).map(function (key) { return map[key]; })
+        .filter(function (item) { return item.count > 0 || item.kind === "主题"; })
+        .filter(function (item) {
+          var query = String(state.query || "").trim().toLowerCase();
+          return !query || (item.name + " " + item.kind).toLowerCase().indexOf(query) !== -1;
+        })
+        .sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name, "zh-CN"); });
+    }
+
+    function createWorkbenchTagCard(tag) {
+      var card = createButton("workbench-card tag-index-card", "");
+      card.style.setProperty("--tag-color", tag.color || "#4f6f5e");
+      card.addEventListener("click", function () {
+        state.query = tag.name;
+        state.workspaceSection = tag.kind === "标签" ? "recent" : "quotes";
+        state.activeView = state.workspaceSection;
+        render();
+        scheduleSave();
+      });
+      card.appendChild(element("span", "tag-index-kind", tag.kind));
+      card.appendChild(element("strong", null, tag.kind === "标签" ? "#" + tag.name : tag.name));
+      card.appendChild(element("span", "workbench-card-summary", tag.count + " 条相关记录"));
+      return card;
     }
 
     function createBookCover(book, className) {
@@ -1327,7 +1650,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
           book.coverImage = coverImage;
           book.updatedAt = new Date().toISOString();
           if (state.data) state.data.books = state.books;
-          renderBookView();
+          render();
           scheduleSave();
           showToast("封面已更新。");
         })
@@ -1377,20 +1700,157 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       return card;
     }
 
-    function renderBookView() {
-      var book = activeBook();
+    function createWorkbenchDetail() {
+      var panel = element("aside", "workbench-detail");
+      var book = selectedBookForWorkbench();
       if (!book) {
-        state.activeView = "shelf";
-        renderShelfView();
-        return;
+        panel.appendChild(createEmptyState("还没有书籍。", "导入或创建书籍后，这里会显示上下文。"));
+        return panel;
       }
 
-      var stage = byId("viewStage");
-      clearElement(stage);
-      stage.className = "view-stage book-stage";
-      stage.appendChild(createBookHeader(book));
-      stage.appendChild(createBookFilters());
-      stage.appendChild(createRecordList(book));
+      var notes = sortNotesByUpdate(logic.getBookNotes(state, book.id, "all", ""));
+      var quotes = notes.filter(function (note) {
+        return logic.getNoteType(note) === "quote";
+      });
+      var essays = notes.filter(function (note) {
+        var type = logic.getNoteType(note);
+        return type === "essay" || type === "thought";
+      });
+
+      panel.appendChild(createDetailBookSummary(book, notes.length));
+      panel.appendChild(createDetailSelectedNote());
+      panel.appendChild(createDetailExcerptList(book, quotes));
+      panel.appendChild(createDetailEssayEntry(book, essays));
+      panel.appendChild(createDetailTags(book, notes));
+      return panel;
+    }
+
+    function createDetailSection(title) {
+      var section = element("section", "detail-section");
+      section.appendChild(element("h2", null, title));
+      return section;
+    }
+
+    function createDetailBookSummary(book, noteCount) {
+      var section = createDetailSection("当前书籍");
+      var summary = element("div", "detail-book-summary");
+      summary.appendChild(createBookCover(book, "detail-mini-cover"));
+      var copy = element("div", "detail-book-copy");
+      copy.appendChild(element("span", "status-dot " + bookStatus(book), bookStatusLabel(bookStatus(book))));
+      copy.appendChild(element("strong", null, book.title));
+      copy.appendChild(element("p", null, book.author || "未填写作者"));
+      copy.appendChild(element("small", null, noteCount + " 条记录 · 最近 " + (noteCount ? noteUpdatedTime(sortNotesByUpdate(logic.getBookNotes(state, book.id, "all", ""))[0]) : "尚未记录")));
+      summary.appendChild(copy);
+
+      var actions = element("div", "detail-actions");
+      var newNote = createButton("primary-action compact", "写随笔");
+      newNote.addEventListener("click", function () {
+        createNote(book.id);
+      });
+      actions.appendChild(newNote);
+      actions.appendChild(createCoverImportControl(book));
+
+      section.appendChild(summary);
+      section.appendChild(actions);
+      return section;
+    }
+
+    function createDetailSelectedNote() {
+      var note = activeNote();
+      if (!note) return document.createDocumentFragment();
+      var section = createDetailSection("选中记录");
+      var card = element("div", "selected-note-preview");
+      var head = element("div", "record-card-head");
+      head.appendChild(element("span", "record-type", typeLabel(logic.getNoteType(note))));
+      head.appendChild(element("span", "record-date", noteUpdatedTime(note)));
+      card.appendChild(head);
+      card.appendChild(element("strong", null, logic.getNoteTitle(note)));
+      if (logic.getNoteText(note, "quote") && logic.getNoteType(note) !== "thought") {
+        card.appendChild(element("blockquote", "quote-snippet", shortText(logic.getNoteText(note, "quote"), 128)));
+      }
+      card.appendChild(element("p", null, shortText(logic.getNoteSummaryText(note), 128) || "还没有正文。"));
+      var edit = createButton("ghost-button", "打开编辑器");
+      edit.addEventListener("click", function () {
+        goEditor(note.id);
+      });
+      card.appendChild(edit);
+      section.appendChild(card);
+      return section;
+    }
+
+    function createDetailExcerptList(book, quotes) {
+      var section = createDetailSection("摘录列表");
+      var list = element("div", "detail-quote-list");
+      if (!quotes.length) {
+        list.appendChild(element("p", "detail-empty", "这本书还没有摘录。"));
+      } else {
+        quotes.slice(0, 5).forEach(function (note) {
+          var item = createButton("detail-quote-item", "");
+          item.addEventListener("click", function () {
+            state.activeNoteId = note.id;
+            state.activeBookId = book.id;
+            renderWorkbenchView();
+            scheduleSave();
+          });
+          item.appendChild(element("blockquote", "quote-snippet", shortText(logic.getNoteText(note, "quote"), 112)));
+          item.appendChild(element("span", null, logic.getNoteTitle(note)));
+          list.appendChild(item);
+        });
+      }
+      section.appendChild(list);
+      return section;
+    }
+
+    function createDetailEssayEntry(book, essays) {
+      var section = createDetailSection("随笔编辑入口");
+      var entry = element("div", "detail-essay-entry");
+      var latest = essays[0] || null;
+      entry.appendChild(element("p", null, latest ? "继续整理这本书中的随笔，或从当前摘录生成新的想法。" : "从这本书开始写第一条随笔，把摘录转化成自己的语言。"));
+      var actions = element("div", "detail-actions");
+      var create = createButton("primary-action compact", "新建随笔");
+      create.addEventListener("click", function () {
+        createNote(book.id);
+      });
+      actions.appendChild(create);
+      if (latest) {
+        var edit = createButton("ghost-button", "继续编辑");
+        edit.addEventListener("click", function () {
+          goEditor(latest.id);
+        });
+        actions.appendChild(edit);
+      }
+      entry.appendChild(actions);
+      section.appendChild(entry);
+      return section;
+    }
+
+    function createDetailTags(book, notes) {
+      var section = createDetailSection("关联标签");
+      var tags = element("div", "detail-tags");
+      var seen = Object.create(null);
+      notes.forEach(function (note) {
+        noteThemes(note).forEach(function (theme) {
+          if (seen["theme:" + theme.id]) return;
+          seen["theme:" + theme.id] = true;
+          tags.appendChild(createNoteChip(theme, "theme-chip"));
+        });
+        logic.getNoteTags(note).forEach(function (tag) {
+          if (seen["tag:" + tag]) return;
+          seen["tag:" + tag] = true;
+          tags.appendChild(createNoteChip({ name: "#" + tag, color: "#b28a55" }, "tag-chip"));
+        });
+      });
+      if (!tags.children.length) {
+        tags.appendChild(element("span", "detail-empty", "暂无关联标签"));
+      }
+      section.appendChild(tags);
+      return section;
+    }
+
+    function renderBookView() {
+      state.workspaceSection = "shelf";
+      state.activeView = "book";
+      renderWorkbenchView();
     }
 
     function createBookHeader(book) {
@@ -1792,6 +2252,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
 
     function goShelf() {
       state.activeView = "shelf";
+      state.workspaceSection = "shelf";
       state.activeBookId = "";
       state.bookFilter = "all";
       state.query = "";
@@ -1801,6 +2262,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
     function goBook(bookId) {
       state.activeBookId = bookId;
       state.activeView = "book";
+      state.workspaceSection = "shelf";
       state.bookFilter = "all";
       state.query = "";
       render();
