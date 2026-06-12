@@ -1068,14 +1068,17 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
     function persistNow() {
       try {
         window.localStorage.setItem(logic.STORAGE_KEY, JSON.stringify(logic.serializeState(state)));
-        setText("saveStatus", "已保存 · " + formatClock(new Date()));
+        setText("lastSavedTime", "最后保存：" + formatClock(new Date()));
+        setText("saveStatus", "已自动保存");
       } catch (error) {
+        setText("lastSavedTime", "最后保存：失败");
         setText("saveStatus", "保存失败");
         showToast("当前浏览器无法保存记录。");
       }
     }
 
     function scheduleSave() {
+      setText("lastSavedTime", "正在保存");
       setText("saveStatus", "保存中…");
       window.clearTimeout(saveTimer);
       saveTimer = window.setTimeout(persistNow, 260);
@@ -1108,6 +1111,16 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
     function createButton(className, text) {
       var button = element("button", className, text);
       button.type = "button";
+      return button;
+    }
+
+    function createIconButton(className, icon, label) {
+      var button = createButton(className, "");
+      button.appendChild(element("span", "button-icon", icon));
+      if (label) {
+        button.appendChild(element("span", "button-label", label));
+      }
+      button.title = label || icon;
       return button;
     }
 
@@ -1231,6 +1244,12 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
 
     function noteUpdatedTime(note) {
       var date = new Date(logic.getNoteUpdatedAt(note) || logic.getNoteCreatedAt(note) || Date.now());
+      if (Number.isNaN(date.getTime())) return "时间未知";
+      return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
+    }
+
+    function noteCreatedDate(note) {
+      var date = new Date(logic.getNoteCreatedAt(note) || Date.now());
       if (Number.isNaN(date.getTime())) return "时间未知";
       return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
     }
@@ -2561,27 +2580,34 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
     function createEditorTopbar(note) {
       var topbar = element("header", "editor-topbar");
       var left = element("div", "editor-nav");
-      var back = createButton("back-button", "返回记录列表");
+      var back = createIconButton("back-button", "‹", "返回记录列表");
       back.addEventListener("click", function () {
         goBook(logic.getNoteBookId(note));
       });
       left.appendChild(back);
       left.appendChild(element("span", "crumb", (noteBook(note) ? noteBook(note).title : "未关联书籍") + " / " + typeLabel(note.type)));
+      left.appendChild(element("span", "editing-indicator", "正在编辑"));
 
       var actions = element("div", "editor-actions");
-      actions.appendChild(element("span", "save-status", "已保存"));
-      actions.lastChild.id = "saveStatus";
-      var focusButton = createButton("ghost-button focus-toggle", state.editorFocusMode ? "退出专注" : "专注");
+      var saveGroup = element("div", "editor-save-group");
+      var lastSaved = element("span", "last-saved", "最后保存：" + formatClock(new Date(logic.getNoteUpdatedAt(note) || Date.now())));
+      lastSaved.id = "lastSavedTime";
+      var saved = element("span", "save-status", "已自动保存");
+      saved.id = "saveStatus";
+      saveGroup.appendChild(lastSaved);
+      saveGroup.appendChild(saved);
+      actions.appendChild(saveGroup);
+      var focusButton = createIconButton("ghost-button focus-toggle", "◌", state.editorFocusMode ? "退出专注" : "专注模式");
       focusButton.addEventListener("click", function () {
         state.editorFocusMode = !state.editorFocusMode;
         renderEditorView();
         scheduleSave();
       });
-      var preview = createButton("ghost-button secondary-action", "预览");
+      var preview = createIconButton("ghost-button secondary-action", "◎", "预览");
       preview.addEventListener("click", showPreview);
-      var exportButton = createButton("ghost-button secondary-action", "导出");
+      var exportButton = createIconButton("ghost-button secondary-action", "↓", "导出");
       exportButton.addEventListener("click", downloadMarkdown);
-      var deleteButton = createButton("ghost-button danger secondary-action", "删除");
+      var deleteButton = createIconButton("ghost-button danger secondary-action", "×", "删除");
       deleteButton.addEventListener("click", deleteActiveNote);
       actions.appendChild(focusButton);
       actions.appendChild(createFavoriteButton(note, "ghost-button secondary-action"));
@@ -2621,6 +2647,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       footer.appendChild(chips);
       footer.appendChild(count);
 
+      paper.appendChild(createEditorFormatBar());
       paper.appendChild(kicker);
       paper.appendChild(title);
       if (quoteBlock) {
@@ -2632,6 +2659,127 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       layout.appendChild(paper);
       layout.appendChild(createMetadataPanel(note));
       return layout;
+    }
+
+    function createEditorFormatBar() {
+      var toolbar = element("div", "editor-formatbar");
+      toolbar.setAttribute("role", "toolbar");
+      toolbar.setAttribute("aria-label", "编辑格式工具");
+
+      [
+        { label: "H1", title: "一级标题", command: "formatBlock", value: "h1" },
+        { label: "H2", title: "二级标题", command: "formatBlock", value: "h2" },
+        { label: "H3", title: "三级标题", command: "formatBlock", value: "h3" },
+        { divider: true },
+        { label: "B", title: "加粗", command: "bold" },
+        { label: "I", title: "斜体", command: "italic" },
+        { label: "U", title: "下划线", command: "underline" },
+        { label: "S", title: "删除线", command: "strikeThrough" },
+        { divider: true },
+        { label: "☷", title: "有序列表", command: "insertOrderedList" },
+        { label: "☰", title: "无序列表", command: "insertUnorderedList" },
+        { divider: true },
+        { label: "“", title: "引用", command: "formatBlock", value: "blockquote" },
+        { label: "↗", title: "插入链接", command: "createLink" },
+        { label: "▧", title: "插入图片", command: "insertImage" },
+        { label: "▦", title: "插入表格", command: "insertTable" },
+        { label: "</>", title: "行内代码", command: "inlineCode" },
+        { label: "♧", title: "代码块", command: "codeBlock" },
+        { spacer: true },
+        { label: "↶", title: "撤销", command: "undo" },
+        { label: "↷", title: "重做", command: "redo" },
+        { label: "…", title: "清除格式", command: "removeFormat" },
+      ].forEach(function (item) {
+        if (item.divider) {
+          toolbar.appendChild(element("span", "editor-tool-divider"));
+          return;
+        }
+        if (item.spacer) {
+          toolbar.appendChild(element("span", "editor-tool-spacer"));
+          return;
+        }
+        var button = createButton("editor-tool-button", item.label);
+        button.title = item.title;
+        button.dataset.command = item.command;
+        if (item.value) button.dataset.value = item.value;
+        button.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+        });
+        button.addEventListener("click", function () {
+          runEditorToolCommand(button.dataset.command, button.dataset.value || "");
+        });
+        toolbar.appendChild(button);
+      });
+
+      return toolbar;
+    }
+
+    function resolveActiveEditor() {
+      var selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        var container = selection.getRangeAt(0).commonAncestorContainer;
+        var el = container.nodeType === 1 ? container : container.parentElement;
+        var selectedEditor = el && el.closest("[data-rich-editor]");
+        if (selectedEditor) return selectedEditor;
+      }
+
+      if (activeRichEditor && document.contains(activeRichEditor)) return activeRichEditor;
+
+      var focusEl = document.activeElement;
+      if (focusEl && focusEl.closest) {
+        var focusedEditor = focusEl.closest("[data-rich-editor]");
+        if (focusedEditor) return focusedEditor;
+      }
+
+      return document.querySelector("[data-rich-editor]");
+    }
+
+    function insertNodeAtSelection(node) {
+      var selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return false;
+      var range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    }
+
+    function insertTableAtSelection() {
+      var table = document.createElement("table");
+      table.innerHTML = "<tbody><tr><td>观点</td><td>依据</td></tr><tr><td></td><td></td></tr></tbody>";
+      insertNodeAtSelection(table);
+    }
+
+    function runEditorToolCommand(command, value) {
+      var editor = resolveActiveEditor();
+      if (!editor) return;
+      activeRichEditor = editor;
+      editor.focus();
+
+      if (command === "inlineCode") {
+        handleInlineCode();
+      } else if (command === "codeBlock") {
+        handleCodeBlock();
+      } else if (command === "insertTable") {
+        insertTableAtSelection();
+      } else if (command === "createLink") {
+        var url = window.prompt("输入链接地址");
+        if (url) document.execCommand("createLink", false, url);
+      } else if (command === "insertImage") {
+        var imageUrl = window.prompt("输入图片地址");
+        if (imageUrl) document.execCommand("insertImage", false, imageUrl);
+      } else if (command === "removeFormat") {
+        clearAllFormatting(editor);
+      } else {
+        document.execCommand(command, false, value || null);
+      }
+
+      triggerFormatFlash(editor);
+      updateRichField(editor);
+      editor.focus();
     }
 
     function createRichBlock(label, field, html, placeholder) {
@@ -2651,26 +2799,67 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
 
     function createMetadataPanel(note) {
       var panel = element("aside", "metadata-panel");
-      panel.appendChild(element("p", "eyebrow", "Writing Cabin"));
-      panel.appendChild(element("h2", null, "创作侧栏"));
+      var header = element("div", "metadata-panel-header");
+      header.appendChild(element("h2", null, "创作侧栏"));
+      var collapse = createButton("panel-collapse", "⌃");
+      collapse.title = "收起侧栏";
+      collapse.addEventListener("click", function () {
+        state.editorFocusMode = true;
+        renderEditorView();
+        scheduleSave();
+      });
+      header.appendChild(collapse);
+      panel.appendChild(header);
+      panel.appendChild(createEditorCoverPanel(note));
+
       var status = element("div", "creation-status");
       status.appendChild(createStatusCard("字数", "sideWordCount", "约 " + countWords(note) + " 字"));
-      status.appendChild(createStatusCard("更新", "sideUpdatedAt", noteUpdatedTime(note)));
-      var bookCard = createStatusCard("书籍", "sideBookTitle", noteBook(note) ? noteBook(note).title : "未关联");
-      bookCard.classList.add("creation-card-wide");
-      status.appendChild(bookCard);
+      status.appendChild(createStatusCard("创建于", "sideCreatedAt", noteCreatedDate(note)));
       panel.appendChild(status);
-      panel.appendChild(element("p", "side-section-title", "元信息"));
-      panel.appendChild(createSelectField("记录类型", "noteType", TYPE_OPTIONS, note.type));
-      panel.appendChild(createSelectField("关联书籍", "bookSelect", state.books.map(function (book) {
+
+      var bookField = createSelectField("书籍", "bookSelect", state.books.map(function (book) {
         return { id: book.id, label: book.title };
-      }), note.bookId));
+      }), logic.getNoteBookId(note));
+      panel.appendChild(bookField);
+      panel.appendChild(createSelectField("所属目录", "noteType", TYPE_OPTIONS, logic.getNoteType(note)));
+      panel.appendChild(createInputField("关键词", "themeInput", noteThemes(note).map(function (theme) { return theme.name; }).join("，")));
       panel.appendChild(createInputField("页码 / 章节", "notePage", note.page));
-      panel.appendChild(createInputField("主题", "themeInput", noteThemes(note).map(function (theme) { return theme.name; }).join("，")));
       panel.appendChild(createInputField("标签", "tagInput", (note.tags || []).join("，")));
       panel.appendChild(element("p", "side-section-title", "写作提示"));
       panel.appendChild(element("p", "hint-text", PROMPTS[Math.abs(note.id.length + note.title.length) % PROMPTS.length]));
       return panel;
+    }
+
+    function createEditorCoverPanel(note) {
+      var section = element("section", "cover-section");
+      section.appendChild(element("p", "side-section-title", "封面"));
+      var row = element("div", "editor-cover-row");
+      var book = noteBook(note);
+      if (book) {
+        row.appendChild(createBookCover(book, "editor-side-cover"));
+      } else {
+        row.appendChild(element("span", "editor-cover-empty", "无"));
+      }
+
+      var actions = element("div", "editor-cover-actions");
+      if (book) {
+        actions.appendChild(createCoverImportControl(book));
+        var remove = createIconButton("ghost-button cover-remove-button danger", "×", "移除");
+        remove.addEventListener("click", function () {
+          book.coverImage = "assets/covers/book-slow-reading.png";
+          book.updatedAt = new Date().toISOString();
+          updateStateBooks();
+          renderEditorView();
+          scheduleSave();
+          showToast("封面已移除。");
+        });
+        actions.appendChild(remove);
+      } else {
+        actions.appendChild(element("span", "cover-empty-note", "选择书籍后可管理封面"));
+      }
+      row.appendChild(actions);
+      section.appendChild(row);
+      return section;
     }
 
     function createStatusCard(label, id, value) {
@@ -2747,6 +2936,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       var note = activeNote();
       if (!note) return;
       var oldType = logic.getNoteType(note);
+      var oldBookId = logic.getNoteBookId(note);
       logic.setNoteMeta(note, {
         type: byId("noteType").value,
         bookId: byId("bookSelect").value,
@@ -2757,7 +2947,13 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       logic.touchNote(note);
       state.activeBookId = logic.getNoteBookId(note);
       pruneUnusedAutoThemes();
-      if (shouldRefreshDerived && (oldType === "thought") !== (logic.getNoteType(note) === "thought")) {
+      if (
+        shouldRefreshDerived &&
+        (
+          (oldType === "thought") !== (logic.getNoteType(note) === "thought") ||
+          oldBookId !== logic.getNoteBookId(note)
+        )
+      ) {
         renderEditorView();
         scheduleSave();
         return;
@@ -2801,6 +2997,7 @@ if (typeof window !== "undefined" && window.document && window.ReadingNotesApp) 
       setText("sideWordCount", wcText);
       setText("sideBookTitle", book ? book.title : "未关联");
       setText("sideUpdatedAt", noteUpdatedTime(note));
+      setText("sideCreatedAt", noteCreatedDate(note));
       var chipBox = byId("noteChips");
       if (!chipBox) return;
       clearElement(chipBox);
