@@ -1,3 +1,5 @@
+import { getCountSummary } from "../view-models/workbenchViewModel.mjs";
+
 const navItems = [
   { id: "shelf", label: "我的书架", meta: "按书籍组织" },
   { id: "quotes", label: "全部摘录", meta: "可复读的原文" },
@@ -31,7 +33,7 @@ export default function Sidebar({ activeSection, onSectionChange, counts, theme,
         ))}
       </nav>
       <footer className="sidebar-footer">
-        <span>{counts.books} 本书 · {counts.notes} 条记录</span>
+        <span>{getCountSummary(counts)}</span>
         <span className="sidebar-actions">
           <a className="secondary-button tiny" href="/api/export" target="_blank" rel="noreferrer">备份</a>
           <button className="icon-button" type="button" onClick={onToggleTheme} title="切换明暗主题">
