@@ -8,9 +8,10 @@ export default function MetadataPanel({ book, note, themes, onOpenEditor, onPatc
   if (!book && !note) {
     return (
       <aside className="detail-panel">
-        <section className="panel-section">
+        <section className="panel-section detail-empty">
+          <p className="panel-label">Workbench Context</p>
           <h2>当前上下文</h2>
-          <p className="muted">选择一本书或一条记录后，这里会显示相关信息。</p>
+          <p className="muted">选中一本书或一条记录后，这里会显示相关信息。</p>
         </section>
       </aside>
     );
@@ -19,11 +20,12 @@ export default function MetadataPanel({ book, note, themes, onOpenEditor, onPatc
   return (
     <aside className="detail-panel">
       {book ? (
-        <section className="panel-section">
+        <section className="panel-section panel-section-book">
+          <p className="panel-label">Current Book</p>
           <h2>当前书籍</h2>
           <div className="book-summary">
             <img src={book.coverImage || "assets/covers/book-slow-reading.png"} alt={`${book.title} cover`} />
-            <div>
+            <div className="book-summary-copy">
               <strong>{book.title}</strong>
               <span>{book.author || "未填写作者"}</span>
             </div>
@@ -32,11 +34,12 @@ export default function MetadataPanel({ book, note, themes, onOpenEditor, onPatc
       ) : null}
 
       {note ? (
-        <section className="panel-section">
+        <section className="panel-section panel-section-note">
+          <p className="panel-label">Side Note</p>
           <h2>选中记录</h2>
           <span className="record-type">{typeLabel(note.type)}</span>
           <strong>{note.title}</strong>
-          <p>{note.bodyText || note.quoteText || "还没有正文。"}</p>
+          <p className="panel-note-body">{note.bodyText || note.quoteText || "还没有正文。"}</p>
           <div className="tag-row">
             {(note.themeIds || []).map((id) => {
               const theme = themes.find((item) => item.id === id);

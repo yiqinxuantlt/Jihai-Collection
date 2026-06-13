@@ -4,8 +4,8 @@ export default function WorkbenchHeader({ section, activeBookId, onCreateBook, o
   const copy = getSectionCopy(section);
 
   return (
-    <header className="main-header">
-      <div>
+    <header className="main-header workbench-header">
+      <div className="header-copy">
         <p className="eyebrow">{copy.eyebrow}</p>
         <h1>{copy.title}</h1>
       </div>

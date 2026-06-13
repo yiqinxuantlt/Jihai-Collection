@@ -4,7 +4,8 @@ const editorTypes = ["quote", "essay", "thought"];
 
 export default function EditorAside({ draft, books, themes, onUpdateDraft }) {
   return (
-    <aside className="metadata-panel">
+    <aside className="metadata-panel editor-aside">
+      <p className="panel-label">Writing Margin</p>
       <h2>创作侧栏</h2>
       <label className="field">
         <span>书籍</span>
@@ -34,7 +35,7 @@ export default function EditorAside({ draft, books, themes, onUpdateDraft }) {
           {themes.map((theme) => <option value={theme.id} key={theme.id}>{theme.name}</option>)}
         </select>
       </label>
-      <p className="hint-text">它能和哪本书、哪个主题产生连接？</p>
+      <p className="hint-text">它能和哪本书、哪个主题、哪一页产生连接？</p>
     </aside>
   );
 }

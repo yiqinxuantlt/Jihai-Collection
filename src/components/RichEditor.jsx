@@ -32,7 +32,7 @@ const extensions = [
   TableHeader,
   TableCell,
   Placeholder.configure({
-    placeholder: ({ editor }) => editor.options.editorProps.attributes["data-placeholder"] || "写下文字",
+    placeholder: ({ editor }) => editor.options.editorProps.attributes["data-placeholder"] || "鍐欎笅鏂囧瓧",
   }),
   CharacterCount,
 ];
@@ -43,7 +43,7 @@ export default function RichEditor({ value, placeholder, className, onChange, on
     content: value,
     editorProps: {
       attributes: {
-        class: `tiptap-surface ${className || ""}`,
+        class: ["tiptap-surface", className].filter(Boolean).join(" "),
         "data-placeholder": placeholder,
       },
     },
