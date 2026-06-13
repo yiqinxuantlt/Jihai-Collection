@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import EditorAside from "./editor/EditorAside.jsx";
 import EditorToolbar from "./EditorToolbar.jsx";
 import RichEditor from "./RichEditor.jsx";
 import { patchNote } from "../api.js";
-
-function emptyDoc() {
-  return { type: "doc", content: [{ type: "paragraph" }] };
-}
-
-function terms(value) {
-  return String(value || "")
-    .split(/[，,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
+import {
+  createEmptyDoc,
+  getBodyLabel,
+  getEditorTypeLabel,
+  getPaperKicker,
+  getSaveStateText,
+  showQuoteSection,
+} from "../view-models/editorViewModel.mjs";
 
 export default function EditorPage({ note, books, themes, onBack, onSaved, onToggleFavorite }) {
   const [draft, setDraft] = useState(note);
@@ -88,13 +86,19 @@ export default function EditorPage({ note, books, themes, onBack, onSaved, onTog
   };
 
   const currentBook = books.find((book) => book.id === draft.bookId);
-  const saveText = saveState === "saving" ? "保存中" : saveState === "dirty" ? "待保存" : saveState === "error" ? "保存失败" : "已保存";
+  const saveText = getSaveStateText(saveState);
+  const typeLabel = getEditorTypeLabel(draft.type);
+  const paperKicker = getPaperKicker({
+    type: draft.type,
+    page: draft.page,
+    bookTitle: currentBook?.title,
+  });
 
   return (
     <main className="editor-stage">
       <header className="editor-topbar">
         <button className="back-button" type="button" onClick={onBack}>‹ 返回记录列表</button>
-        <span className="crumb">{currentBook ? currentBook.title : "未关联书籍"} / {draft.type === "quote" ? "摘录" : draft.type === "thought" ? "感想" : "随笔"}</span>
+        <span className="crumb">{currentBook ? currentBook.title : "未关联书籍"} / {typeLabel}</span>
         <span className={`save-pill ${saveState}`}>{saveText}</span>
         <button className={`secondary-button ${draft.favorite ? "active" : ""}`} type="button" onClick={() => onToggleFavorite(draft.id, !draft.favorite)}>
           {draft.favorite ? "已收藏" : "收藏"}
@@ -105,16 +109,16 @@ export default function EditorPage({ note, books, themes, onBack, onSaved, onTog
       <div className="editor-layout">
         <article className="editor-paper">
           <EditorToolbar editor={activeEditor} dialogs={dialogs} />
-          <p className="paper-kicker">{draft.type === "quote" ? "摘录" : "随笔"} · {draft.page || "未填写页码"} · {currentBook ? currentBook.title : "未关联"}</p>
+          <p className="paper-kicker">{paperKicker}</p>
           <input className="title-input" aria-label="记录标题" value={draft.title} onChange={(event) => updateDraft({ title: event.target.value })} />
 
-          {draft.type !== "thought" ? (
+          {showQuoteSection(draft.type) ? (
             <section className="rich-block">
               <p className="block-label">摘录原文</p>
               <RichEditor
                 className="quote-editor"
                 placeholder="粘贴或写下这本书里击中你的句子"
-                value={draft.quoteDoc || emptyDoc()}
+                value={draft.quoteDoc || createEmptyDoc()}
                 onChange={(doc) => updateDraft({ quoteDoc: doc })}
                 onReady={setActiveEditor}
               />
@@ -122,48 +126,17 @@ export default function EditorPage({ note, books, themes, onBack, onSaved, onTog
           ) : null}
 
           <section className="rich-block">
-            <p className="block-label">{draft.type === "thought" ? "感想正文" : "随笔正文"}</p>
+            <p className="block-label">{getBodyLabel(draft.type)}</p>
             <RichEditor
               placeholder="写下你的理解、联想、问题或复盘"
-              value={draft.bodyDoc || emptyDoc()}
+              value={draft.bodyDoc || createEmptyDoc()}
               onChange={(doc) => updateDraft({ bodyDoc: doc })}
               onReady={setActiveEditor}
             />
           </section>
         </article>
 
-        <aside className="metadata-panel">
-          <h2>创作侧栏</h2>
-          <label className="field">
-            <span>书籍</span>
-            <select value={draft.bookId || ""} onChange={(event) => updateDraft({ bookId: event.target.value })}>
-              {books.map((book) => <option value={book.id} key={book.id}>{book.title}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>所属目录</span>
-            <select value={draft.type} onChange={(event) => updateDraft({ type: event.target.value })}>
-              <option value="quote">摘录</option>
-              <option value="essay">随笔</option>
-              <option value="thought">感想</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>页码 / 章节</span>
-            <input value={draft.page || ""} onChange={(event) => updateDraft({ page: event.target.value })} />
-          </label>
-          <label className="field">
-            <span>标签</span>
-            <input value={(draft.tags || []).join("，")} onChange={(event) => updateDraft({ tags: terms(event.target.value) })} />
-          </label>
-          <label className="field">
-            <span>关键词</span>
-            <select multiple value={draft.themeIds || []} onChange={(event) => updateDraft({ themeIds: Array.from(event.target.selectedOptions, (option) => option.value) })}>
-              {themes.map((theme) => <option value={theme.id} key={theme.id}>{theme.name}</option>)}
-            </select>
-          </label>
-          <p className="hint-text">它能和哪本书、哪个主题产生连接？</p>
-        </aside>
+        <EditorAside draft={draft} books={books} themes={themes} onUpdateDraft={updateDraft} />
       </div>
 
       {dialog ? (
