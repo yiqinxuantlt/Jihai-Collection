@@ -1,3 +1,8 @@
 .superpowers/
 node_modules/
 *.log
+dist/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
