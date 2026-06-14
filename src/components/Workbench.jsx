@@ -20,6 +20,7 @@ export default function Workbench({
   const booksById = new Map(books.map((book) => [book.id, book]));
   const visibleNotes = getVisibleNotes(section, notes);
   const timelineGroups = groupNotesByDate(notes);
+  const resultsClassName = ["results", `results-${section}`].join(" ");
 
   return (
     <main className="workbench-main">
@@ -30,12 +31,13 @@ export default function Workbench({
         onCreateNote={onCreateNote}
       />
 
-      <section className="results" aria-live="polite">
-        {section === "shelf" && books.map((book) => (
+      <section className={resultsClassName} aria-live="polite">
+        {section === "shelf" && books.map((book, index) => (
           <BookShelfCard
             key={book.id}
             book={book}
             notes={notes}
+            featured={index === 0}
             selected={book.id === activeBookId}
             onSelect={onBookSelect}
           />

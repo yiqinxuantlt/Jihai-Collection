@@ -37,7 +37,7 @@ export default function Sidebar({ activeSection, onSectionChange, counts, theme,
         <span className="sidebar-actions">
           <a className="secondary-button tiny" href="/api/export" target="_blank" rel="noreferrer">备份</a>
           <button className="icon-button" type="button" onClick={onToggleTheme} title="切换明暗主题">
-            {theme === "dark" ? "☾" : "☀"}
+            {theme === "dark" ? "浅" : "暗"}
           </button>
         </span>
       </footer>

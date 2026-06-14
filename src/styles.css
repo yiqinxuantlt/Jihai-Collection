@@ -1,9 +1,9 @@
 :root {
   color-scheme: light;
-  --bg-canvas: #f3efe6;
-  --bg-shell: #faf7f0;
-  --surface: #fffdfa;
-  --surface-muted: #f2ede3;
+  --bg-canvas: #f4f3ee;
+  --bg-shell: #fbfaf6;
+  --surface: #fffefa;
+  --surface-muted: #f0eee7;
   --paper: #fffdf8;
   --ink: #24211c;
   --ink-soft: #514b43;
@@ -16,9 +16,10 @@
   --gold: #b28a55;
   --danger: #a4473e;
   --focus: rgba(82, 111, 96, 0.22);
-  --shell-shadow: 0 18px 48px rgba(36, 33, 28, 0.08);
-  --paper-shadow: 0 20px 44px rgba(36, 33, 28, 0.07);
+  --shell-shadow: 0 16px 42px rgba(36, 33, 28, 0.07);
+  --paper-shadow: 0 18px 40px rgba(36, 33, 28, 0.08);
   --paper-edge: rgba(255, 255, 255, 0.78);
+  --inset-quiet: inset 0 1px 0 var(--paper-edge);
   --font-ui: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
   --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, serif;
   --font-hand: "LXGW WenKai", "Kaiti SC", KaiTi, serif;
@@ -45,6 +46,7 @@
   --shell-shadow: 0 22px 56px rgba(0, 0, 0, 0.28);
   --paper-shadow: 0 22px 48px rgba(0, 0, 0, 0.24);
   --paper-edge: rgba(255, 255, 255, 0.04);
+  --inset-quiet: inset 0 1px 0 var(--paper-edge);
 }
 
 * {
@@ -60,8 +62,11 @@ body {
   min-width: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top, rgba(255, 252, 246, 0.82), transparent 34%),
+    linear-gradient(90deg, rgba(36, 33, 28, 0.025) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(36, 33, 28, 0.018) 1px, transparent 1px),
+    radial-gradient(circle at top, rgba(255, 252, 246, 0.72), transparent 36%),
     var(--bg-canvas);
+  background-size: 28px 28px, 28px 28px, auto;
   color: var(--ink);
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
@@ -98,17 +103,23 @@ select:focus-visible,
 
 .app-shell {
   min-height: 100vh;
-  padding: 18px;
+  padding: clamp(12px, 1.8vw, 22px);
   background: transparent;
+  display: grid;
+  place-items: stretch center;
 }
 
 .workbench-shell {
+  width: min(1480px, 100%);
   min-height: calc(100vh - 36px);
   border: 1px solid var(--border);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 24%), var(--bg-shell);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 22%),
+    linear-gradient(90deg, color-mix(in srgb, var(--surface-muted) 52%, transparent), transparent 42%),
+    var(--bg-shell);
   display: grid;
-  grid-template-columns: 256px minmax(0, 1fr) 324px;
+  grid-template-columns: 264px minmax(0, 1fr) 322px;
   overflow: hidden;
   box-shadow: var(--shell-shadow);
 }
@@ -132,11 +143,13 @@ select:focus-visible,
 
 .sidebar {
   border-right: 1px solid var(--border);
-  padding: 26px 18px 20px;
+  padding: 24px 16px 18px;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 24px;
-  background: color-mix(in srgb, var(--surface-muted) 74%, var(--paper));
+  gap: 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--paper) 58%, transparent), transparent 35%),
+    color-mix(in srgb, var(--surface-muted) 72%, var(--paper));
 }
 
 .brand {
@@ -147,10 +160,10 @@ select:focus-visible,
 }
 
 .brand-mark {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border: 1px solid color-mix(in srgb, var(--sage) 22%, var(--border));
-  border-radius: 10px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
   background:
@@ -169,7 +182,7 @@ select:focus-visible,
 
 .brand strong {
   font-size: 15px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .brand span,
@@ -182,21 +195,42 @@ select:focus-visible,
   color: var(--muted);
 }
 
+.card-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.card-meta span + span::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  margin-right: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  vertical-align: middle;
+  background: color-mix(in srgb, var(--muted) 58%, transparent);
+}
+
 .nav {
   display: grid;
   align-content: start;
-  gap: 7px;
+  gap: 6px;
 }
 
 .nav-item,
 .book-card,
 .note-card > button:first-child {
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--ink-soft);
   text-align: left;
   cursor: pointer;
+  position: relative;
   transition:
     background-color 140ms ease,
     border-color 140ms ease,
@@ -205,7 +239,7 @@ select:focus-visible,
 }
 
 .nav-item {
-  padding: 12px 13px;
+  padding: 11px 12px 11px 14px;
   display: grid;
   gap: 4px;
 }
@@ -222,7 +256,7 @@ select:focus-visible,
 
 .nav-item.selected {
   border-color: var(--border-strong);
-  box-shadow: inset 2px 0 0 var(--sage);
+  box-shadow: inset 2px 0 0 var(--sage), var(--inset-quiet);
   color: var(--ink);
 }
 
@@ -249,26 +283,38 @@ select:focus-visible,
   font-size: 12px;
 }
 
+[data-theme="dark"] body {
+  background:
+    linear-gradient(90deg, rgba(241, 234, 219, 0.026) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(241, 234, 219, 0.018) 1px, transparent 1px),
+    radial-gradient(circle at top, rgba(168, 189, 145, 0.08), transparent 36%),
+    var(--bg-canvas);
+  background-size: 28px 28px, 28px 28px, auto;
+}
+
 .workbench-main {
   min-width: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background: transparent;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--paper) 44%, transparent), transparent 28%),
+    transparent;
 }
 
 .main-header,
 .editor-topbar {
   border-bottom: 1px solid var(--border);
-  padding: 24px 30px;
+  padding: 24px 30px 22px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
 
 .workbench-header .header-copy {
   display: grid;
-  gap: 6px;
+  gap: 7px;
+  max-width: 58ch;
 }
 
 .eyebrow {
@@ -281,9 +327,18 @@ select:focus-visible,
 h1 {
   margin: 0;
   font-family: var(--font-serif);
-  font-size: 33px;
-  line-height: 1.24;
+  font-size: 32px;
+  line-height: 1.22;
   font-weight: 700;
+  max-width: 18ch;
+}
+
+.header-description {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .header-actions,
@@ -301,7 +356,7 @@ h1 {
 .tool-button {
   min-height: 36px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--paper) 90%, var(--surface-muted));
   color: var(--ink-soft);
   cursor: pointer;
@@ -354,21 +409,47 @@ h1 {
 .results {
   min-height: 0;
   overflow: auto;
-  padding: 24px 30px 30px;
+  padding: 24px 30px 32px;
   display: grid;
   align-content: start;
   gap: 14px;
+  scrollbar-gutter: stable;
+}
+
+.results-shelf {
+  grid-template-columns: repeat(auto-fill, minmax(278px, 1fr));
+  grid-auto-flow: dense;
+  align-items: stretch;
+}
+
+.results-quotes,
+.results-essays,
+.results-favorites {
+  max-width: 900px;
+  width: 100%;
 }
 
 .book-card {
   width: 100%;
   border-color: var(--border);
   background: color-mix(in srgb, var(--surface) 88%, var(--paper));
-  padding: 18px;
+  padding: 16px;
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 10px 18px;
-  box-shadow: inset 0 1px 0 var(--paper-edge);
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 9px 16px;
+  align-content: start;
+  box-shadow: var(--inset-quiet);
+  content-visibility: auto;
+  contain-intrinsic-size: 160px;
+}
+
+.book-card.featured {
+  grid-column: span 2;
+  grid-template-columns: 86px minmax(0, 1fr);
+  padding: 18px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--gold) 8%, transparent), transparent 42%),
+    color-mix(in srgb, var(--surface) 90%, var(--paper));
 }
 
 .book-card:hover,
@@ -383,21 +464,27 @@ h1 {
   border-color: color-mix(in srgb, var(--sage) 46%, var(--border));
   box-shadow:
     inset 2px 0 0 var(--sage),
-    inset 0 1px 0 var(--paper-edge);
+    var(--inset-quiet);
 }
 
 .book-cover {
   grid-row: span 4;
-  width: 68px;
-  border-radius: 8px;
-  box-shadow: 0 12px 26px rgba(36, 33, 28, 0.14);
+  width: 66px;
+  aspect-ratio: 5 / 7;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 10px 22px rgba(36, 33, 28, 0.13);
+}
+
+.book-card.featured .book-cover {
+  width: 80px;
 }
 
 .book-card strong,
 .note-card strong,
 .panel-section strong {
   font-family: var(--font-serif);
-  font-size: 19px;
+  font-size: 18px;
   line-height: 1.34;
 }
 
@@ -411,14 +498,33 @@ h1 {
   line-height: 1.72;
 }
 
+.book-card p,
+.note-card p,
+.panel-note-body {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.book-card p {
+  -webkit-line-clamp: 3;
+}
+
+.note-card p,
+.panel-note-body {
+  -webkit-line-clamp: 4;
+}
+
 .note-card {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 90%, var(--paper));
   padding: 15px;
   display: grid;
   gap: 11px;
-  box-shadow: inset 0 1px 0 var(--paper-edge);
+  box-shadow: var(--inset-quiet);
+  content-visibility: auto;
+  contain-intrinsic-size: 164px;
 }
 
 .note-card > button:first-child {
@@ -435,6 +541,16 @@ blockquote {
   color: var(--ink-soft);
   font-family: var(--font-serif);
   line-height: 1.84;
+}
+
+.note-card .ghost-button {
+  justify-self: end;
+  opacity: 0.76;
+}
+
+.note-card:hover .ghost-button,
+.note-card:focus-within .ghost-button {
+  opacity: 1;
 }
 
 .tag-grid,
@@ -460,38 +576,48 @@ blockquote {
 
 .timeline-group {
   display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
   gap: 12px;
+  align-items: start;
 }
 
 .timeline-group h2 {
   margin: 0;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 10px;
+  position: sticky;
+  top: 0;
+  border-bottom: 0;
+  padding: 8px 0 0;
   color: var(--muted);
   font-family: var(--font-hand);
   font-size: 14px;
 }
 
+.timeline-group .note-card {
+  grid-column: 2;
+}
+
 .detail-panel {
   min-width: 0;
   border-left: 1px solid var(--border);
-  padding: 22px;
+  padding: 20px;
   overflow: auto;
   display: grid;
   align-content: start;
   gap: 16px;
-  background: color-mix(in srgb, var(--surface-muted) 68%, var(--paper));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--paper) 58%, transparent), transparent 34%),
+    color-mix(in srgb, var(--surface-muted) 68%, var(--paper));
 }
 
 .panel-section {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 88%, var(--paper));
-  padding: 18px;
+  padding: 16px;
   display: grid;
   gap: 12px;
   box-shadow:
-    inset 0 1px 0 var(--paper-edge),
+    var(--inset-quiet),
     0 8px 24px rgba(36, 33, 28, 0.04);
   transition:
     background-color 140ms ease,
@@ -511,7 +637,7 @@ blockquote {
   color: var(--clay);
   font-family: var(--font-hand);
   font-size: 12px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .book-summary {
@@ -554,7 +680,7 @@ blockquote {
 
 .empty-state {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 88%, var(--paper));
   padding: 26px;
   display: grid;
@@ -565,7 +691,19 @@ blockquote {
   min-height: 100vh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background: var(--bg-shell);
+  background:
+    linear-gradient(90deg, rgba(36, 33, 28, 0.024) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(36, 33, 28, 0.016) 1px, transparent 1px),
+    var(--bg-shell);
+  background-size: 30px 30px, 30px 30px, auto;
+}
+
+[data-theme="dark"] .editor-stage {
+  background:
+    linear-gradient(90deg, rgba(241, 234, 219, 0.024) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(241, 234, 219, 0.016) 1px, transparent 1px),
+    var(--bg-shell);
+  background-size: 30px 30px, 30px 30px, auto;
 }
 
 .editor-topbar {
@@ -575,6 +713,23 @@ blockquote {
     var(--bg-shell);
   align-items: center;
   flex-wrap: wrap;
+}
+
+.editor-context,
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.editor-context {
+  flex: 1 1 auto;
+}
+
+.editor-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
 }
 
 .crumb,
@@ -593,18 +748,18 @@ blockquote {
 .editor-layout {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(720px, 840px) minmax(290px, 340px);
+  grid-template-columns: minmax(720px, 820px) minmax(288px, 330px);
   justify-content: center;
   align-items: start;
-  gap: 36px;
-  padding: 40px clamp(24px, 4vw, 72px) 56px;
+  gap: 34px;
+  padding: 38px clamp(24px, 4vw, 70px) 56px;
   overflow: auto;
 }
 
 .editor-paper,
 .metadata-panel {
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 20%),
     var(--paper);
@@ -613,9 +768,9 @@ blockquote {
 
 .editor-paper {
   min-height: min(820px, calc(100vh - 170px));
-  padding: 42px 56px 52px;
+  padding: 42px 54px 52px;
   box-shadow:
-    inset 0 1px 0 var(--paper-edge),
+    var(--inset-quiet),
     var(--paper-shadow);
 }
 
@@ -623,7 +778,7 @@ blockquote {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 44px;
+  margin-bottom: 38px;
   padding-bottom: 10px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -639,6 +794,7 @@ blockquote {
   border-color: transparent;
   background: transparent;
   color: var(--ink-soft);
+  font-weight: 600;
 }
 
 .tool-button:disabled {
@@ -683,7 +839,7 @@ blockquote {
   background: transparent;
   color: var(--ink);
   font-family: var(--font-serif);
-  font-size: 38px;
+  font-size: 36px;
   font-weight: 700;
   line-height: 1.28;
   letter-spacing: 0;
@@ -691,7 +847,7 @@ blockquote {
 
 .rich-block {
   max-width: 720px;
-  margin-top: 40px;
+  margin-top: 38px;
 }
 
 .block-label {
@@ -810,7 +966,7 @@ blockquote {
 .editor-aside {
   position: sticky;
   top: 32px;
-  padding: 24px;
+  padding: 22px;
   display: grid;
   gap: 15px;
 }
@@ -825,7 +981,7 @@ blockquote {
 .field select {
   min-height: 40px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 82%, var(--paper));
   color: var(--ink);
   padding: 0 12px;
@@ -839,7 +995,7 @@ blockquote {
 .hint-text {
   margin: 0;
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  border-radius: 10px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--surface-muted) 78%, var(--paper));
   color: var(--muted);
   padding: 14px 16px;
@@ -858,7 +1014,7 @@ blockquote {
 .mini-dialog {
   width: min(420px, calc(100vw - 32px));
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--paper);
   padding: 18px;
   display: grid;
@@ -870,7 +1026,7 @@ blockquote {
   width: 100%;
   min-height: 40px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 82%, var(--paper));
   color: var(--ink);
   padding: 0 12px;
@@ -910,6 +1066,30 @@ blockquote {
   }
 }
 
+@media (max-width: 980px) {
+  .main-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
+  }
+
+  .book-card.featured {
+    grid-column: span 1;
+  }
+
+  .timeline-group {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-group h2,
+  .timeline-group .note-card {
+    grid-column: 1;
+  }
+}
+
 @media (max-width: 760px) {
   .app-shell {
     padding: 0;
@@ -919,6 +1099,10 @@ blockquote {
     min-height: 100vh;
     border-radius: 0;
     grid-template-columns: 1fr;
+  }
+
+  .main-header {
+    gap: 14px;
   }
 
   .sidebar {
@@ -947,9 +1131,34 @@ blockquote {
     padding-right: 18px;
   }
 
+  .results-shelf {
+    grid-template-columns: 1fr;
+  }
+
+  .book-card,
+  .book-card.featured {
+    grid-template-columns: 64px minmax(0, 1fr);
+    padding: 15px;
+  }
+
+  .book-cover,
+  .book-card.featured .book-cover {
+    width: 58px;
+  }
+
   .editor-topbar {
     align-items: flex-start;
     padding: 14px 16px;
+  }
+
+  .editor-context,
+  .editor-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .editor-actions {
+    justify-content: flex-start;
   }
 
   .editor-layout {
@@ -957,7 +1166,7 @@ blockquote {
   }
 
   .editor-paper {
-    border-radius: 18px;
+    border-radius: 12px;
     padding: 26px 20px 30px;
   }
 

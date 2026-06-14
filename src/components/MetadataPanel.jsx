@@ -9,7 +9,7 @@ export default function MetadataPanel({ book, note, themes, onOpenEditor, onPatc
     return (
       <aside className="detail-panel">
         <section className="panel-section detail-empty">
-          <p className="panel-label">Workbench Context</p>
+          <p className="panel-label">工作台边注</p>
           <h2>当前上下文</h2>
           <p className="muted">选中一本书或一条记录后，这里会显示相关信息。</p>
         </section>
@@ -21,7 +21,7 @@ export default function MetadataPanel({ book, note, themes, onOpenEditor, onPatc
     <aside className="detail-panel">
       {book ? (
         <section className="panel-section panel-section-book">
-          <p className="panel-label">Current Book</p>
+          <p className="panel-label">当前书籍</p>
           <h2>当前书籍</h2>
           <div className="book-summary">
             <img src={book.coverImage || "assets/covers/book-slow-reading.png"} alt={`${book.title} cover`} />
@@ -35,7 +35,7 @@ export default function MetadataPanel({ book, note, themes, onOpenEditor, onPatc
 
       {note ? (
         <section className="panel-section panel-section-note">
-          <p className="panel-label">Side Note</p>
+          <p className="panel-label">选中边注</p>
           <h2>选中记录</h2>
           <span className="record-type">{typeLabel(note.type)}</span>
           <strong>{note.title}</strong>

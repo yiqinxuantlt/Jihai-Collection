@@ -1,19 +1,23 @@
 const SECTION_COPY = {
   shelf: {
-    eyebrow: "Reading Knowledge Desk",
+    eyebrow: "书架索引",
     title: "我的书架",
+    description: "按书籍整理摘录、随笔和最近形成的想法。",
   },
   tags: {
-    eyebrow: "Reading Knowledge Desk",
+    eyebrow: "主题索引",
     title: "标签索引",
+    description: "把散落的记录收束到可回访的关键词里。",
   },
   timeline: {
-    eyebrow: "Reading Knowledge Desk",
+    eyebrow: "时间线",
     title: "最近阅读",
+    description: "按生成时间回到每一段阅读现场。",
   },
   default: {
-    eyebrow: "Reading Knowledge Desk",
+    eyebrow: "记录列表",
     title: "阅读记录",
+    description: "筛选摘录、随笔和收藏，快速进入写作。",
   },
 };
 

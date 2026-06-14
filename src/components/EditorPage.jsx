@@ -97,13 +97,17 @@ export default function EditorPage({ note, books, themes, onBack, onSaved, onTog
   return (
     <main className="editor-stage">
       <header className="editor-topbar">
-        <button className="back-button" type="button" onClick={onBack}>‹ 返回记录列表</button>
-        <span className="crumb">{currentBook ? currentBook.title : "未关联书籍"} / {typeLabel}</span>
-        <span className={`save-pill ${saveState}`}>{saveText}</span>
-        <button className={`secondary-button ${draft.favorite ? "active" : ""}`} type="button" onClick={() => onToggleFavorite(draft.id, !draft.favorite)}>
-          {draft.favorite ? "已收藏" : "收藏"}
-        </button>
-        <a className="secondary-button" href={`/api/notes/${draft.id}/export.md`} target="_blank" rel="noreferrer">导出</a>
+        <div className="editor-context">
+          <button className="back-button" type="button" onClick={onBack}>‹ 返回记录列表</button>
+          <span className="crumb">{currentBook ? currentBook.title : "未关联书籍"} / {typeLabel}</span>
+        </div>
+        <div className="editor-actions">
+          <span className={`save-pill ${saveState}`}>{saveText}</span>
+          <button className={`secondary-button ${draft.favorite ? "active" : ""}`} type="button" onClick={() => onToggleFavorite(draft.id, !draft.favorite)}>
+            {draft.favorite ? "已收藏" : "收藏"}
+          </button>
+          <a className="secondary-button" href={`/api/notes/${draft.id}/export.md`} target="_blank" rel="noreferrer">导出</a>
+        </div>
       </header>
 
       <div className="editor-layout">

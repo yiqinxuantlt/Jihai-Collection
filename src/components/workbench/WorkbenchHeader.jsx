@@ -8,6 +8,7 @@ export default function WorkbenchHeader({ section, activeBookId, onCreateBook, o
       <div className="header-copy">
         <p className="eyebrow">{copy.eyebrow}</p>
         <h1>{copy.title}</h1>
+        <p className="header-description">{copy.description}</p>
       </div>
       <div className="header-actions">
         <button className="secondary-button" type="button" onClick={onCreateBook}>新建书籍</button>

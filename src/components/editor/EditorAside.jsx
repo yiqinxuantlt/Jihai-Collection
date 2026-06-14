@@ -5,7 +5,7 @@ const editorTypes = ["quote", "essay", "thought"];
 export default function EditorAside({ draft, books, themes, onUpdateDraft }) {
   return (
     <aside className="metadata-panel editor-aside">
-      <p className="panel-label">Writing Margin</p>
+      <p className="panel-label">写作边注</p>
       <h2>创作侧栏</h2>
       <label className="field">
         <span>书籍</span>
